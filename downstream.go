@@ -36,7 +36,6 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage) {
 func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *ReceivedMessage) {
 	defer conn.Close()
 
-	parser := SMTPParser()
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
 
@@ -44,22 +43,19 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 	session.Start().WriteTo(writer)
 
 	for {
-		line, err := reader.ReadString('\n')
+		resp, err := session.ReadCommand(reader)
 		if err != nil {
 			l.Printf("error reading from client:", err)
 			break
 		}
 
-		resp := session.Advance(parser(line))
 		resp.WriteTo(writer)
 
 		switch {
 		case resp.IsClose():
 			return
 		case resp.NeedsData():
-			resp, msg := session.ReadData(func() (string, error) {
-				return reader.ReadString('\n')
-			})
+			resp, msg := session.ReadData(reader)
 			resp.WriteTo(writer)
 			if msg != nil {
 				received <- msg

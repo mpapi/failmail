@@ -32,13 +32,19 @@ func (r Response) WriteTo(writer *bufio.Writer) {
 	writer.Flush()
 }
 
+type stringReader interface {
+	ReadString(delim byte) (string, error)
+}
+
 type Session struct {
 	Received *ReceivedMessage
 	hostname string
+	parser   Parser
 }
 
 func (s *Session) Start() Response {
 	s.initHostname()
+	s.parser = SMTPParser()
 	s.Received = &ReceivedMessage{}
 
 	return Response{220, fmt.Sprintf("%s Hi there", s.hostname)}
@@ -85,12 +91,20 @@ func (s *Session) setData(data string) (Response, *ReceivedMessage) {
 	}
 }
 
+func (s *Session) ReadCommand(reader stringReader) (Response, error) {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return Response{500, "Parse error"}, err
+	}
+	return s.Advance(s.parser(line)), nil
+}
+
 // Reads the payload from a DATA command -- up to and including the "." on a
 // newline by itself.
-func (s *Session) ReadData(reader func() (string, error)) (Response, *ReceivedMessage) {
+func (s *Session) ReadData(reader stringReader) (Response, *ReceivedMessage) {
 	data := new(bytes.Buffer)
 	for {
-		line, err := reader()
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			return Response{451, "Failed to read data"}, nil
 		}

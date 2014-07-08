@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+type mockStringReader struct {
+	data string
+	err  error
+}
+
+func (m mockStringReader) ReadString(delim byte) (string, error) {
+	return m.data, m.err
+}
+
 func TestResponseIsClose(t *testing.T) {
 	r := Response{221, "Whatever"}
 	if !r.IsClose() {
@@ -57,6 +66,31 @@ func TestSessionStart(t *testing.T) {
 	}
 }
 
+func TestSessionReadCommand(t *testing.T) {
+	s := new(Session)
+	s.Start()
+
+	buf := bytes.NewBufferString("HELO test.example.com\r\n")
+	resp, err := s.ReadCommand(buf)
+
+	if err != nil {
+		t.Errorf("ReadCommand of a valid string shouldn't return an error")
+	}
+
+	if resp.Code != 250 {
+		t.Errorf("HELO should get a 250 response")
+	}
+
+	resp, err = s.ReadCommand(mockStringReader{"", fmt.Errorf("Error")})
+	if err == nil {
+		t.Errorf("ReadCommand should return an error when the reader does")
+	}
+
+	if resp.Code != 500 {
+		t.Errorf("ReadCommand should return a 500 response when the reader errors")
+	}
+}
+
 func TestSessionAdvance(t *testing.T) {
 	s := new(Session)
 	s.Start()
@@ -91,7 +125,8 @@ func TestSessionAdvance(t *testing.T) {
 		t.Errorf("RCPT before FROM should get a 503 response")
 	}
 
-	if resp, msg := s.ReadData(func() (string, error) { return ".\r\n", nil }); resp.Code != 503 || msg != nil {
+	buf := bytes.NewBufferString(".\r\n")
+	if resp, msg := s.ReadData(buf); resp.Code != 503 || msg != nil {
 		t.Errorf("data read before FROM should get a 503 response")
 	}
 
@@ -135,18 +170,18 @@ func TestSessionAdvance(t *testing.T) {
 		t.Errorf("DATA should get a 354 response")
 	}
 
-	buf := bytes.NewBufferString("\x00\xff\r\n.\r\n")
-	if resp, msg := s.ReadData(func() (string, error) { return buf.ReadString('\n') }); resp.Code != 451 || msg != nil {
+	buf = bytes.NewBufferString("\x00\xff\r\n.\r\n")
+	if resp, msg := s.ReadData(buf); resp.Code != 451 || msg != nil {
 		t.Fatalf("bad data read should get a 451 response: %d", resp.Code)
 	}
 
-	if resp, msg := s.ReadData(func() (string, error) { return "", fmt.Errorf("error") }); resp.Code != 451 || msg != nil {
+	if resp, msg := s.ReadData(mockStringReader{"", fmt.Errorf("error")}); resp.Code != 451 || msg != nil {
 		t.Errorf("expected a 451 from an error reading DATA")
 	}
 
 	// TODO data followed by anything else should fail
 	buf = bytes.NewBufferString("Subject: test\r\n\r\ntest\r\n.\r\n")
-	resp, msg := s.ReadData(func() (string, error) { return buf.ReadString('\n') })
+	resp, msg := s.ReadData(buf)
 	if resp.Code != 250 || msg == nil {
 		t.Errorf("DATA payload should get a 250 response")
 	}
