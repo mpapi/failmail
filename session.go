@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/hut8labs/failmail/parse"
 	"net/mail"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -33,11 +34,22 @@ func (r Response) WriteTo(writer *bufio.Writer) {
 
 type Session struct {
 	Received *ReceivedMessage
+	hostname string
 }
 
 func (s *Session) Start() Response {
+	s.initHostname()
 	s.Received = &ReceivedMessage{}
-	return Response{220, "localhost Hi there"}
+
+	return Response{220, fmt.Sprintf("%s Hi there", s.hostname)}
+}
+
+func (s *Session) initHostname() {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "localhost"
+	}
+	s.hostname = hostname
 }
 
 func (s *Session) setFrom(from string) Response {
@@ -104,7 +116,7 @@ func (s *Session) Advance(node *parse.Node) Response {
 
 	switch strings.ToLower(command.Text) {
 	case "quit":
-		return Response{221, "localhost See ya"}
+		return Response{221, fmt.Sprintf("%s See ya", s.hostname)}
 	case "helo":
 		return Response{250, "Hello"}
 	case "ehlo":
