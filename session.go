@@ -42,6 +42,8 @@ type Session struct {
 	parser   Parser
 }
 
+// Sets up a session and returns the `Response` that should be sent to a
+// client immediately after it connects.
 func (s *Session) Start() Response {
 	s.initHostname()
 	s.parser = SMTPParser()
@@ -91,6 +93,10 @@ func (s *Session) setData(data string) (Response, *ReceivedMessage) {
 	}
 }
 
+// Reads and parses a single command and advances the session accordingly.  In
+// case of error, returns either a non-nil error (if the command couldn't be
+// read from the `reader`) or a `Response` with the appropriate SMTP error code
+// (for other error conditions).
 func (s *Session) ReadCommand(reader stringReader) (Response, error) {
 	line, err := reader.ReadString('\n')
 	if err != nil {
@@ -118,6 +124,10 @@ func (s *Session) ReadData(reader stringReader) (Response, *ReceivedMessage) {
 	return s.setData(data.String())
 }
 
+// Advances the state of the session according to the parsed SMTP command, and
+// returns an appropriate `Response`. For example, the MAIL command modifies
+// the session to store the sender's address and to expect future commands to
+// specify the recipients and body of the message.
 func (s *Session) Advance(node *parse.Node) Response {
 	if node == nil {
 		return Response{500, "Parse error"}
