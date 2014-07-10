@@ -55,6 +55,7 @@ Work in progress, ideas good and bad, and otherwise:
 * an HTTP or other interface to stats about received mails (e.g. for
   monitoring)
 * rate monitoring (a failnozzle feature): send an email to e.g. a pager if the
-  number of incoming emails excceeds some limit
+  number of incoming emails excceeds some limit (there's currently an
+  experimental implementation that logs rather than sending email)
 * shell script hooks: run a shell command after sending a summary email
 * ...

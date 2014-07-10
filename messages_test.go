@@ -66,6 +66,36 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 }
 
+func TestRateCounter(t *testing.T) {
+	r := NewRateCounter(10, 2)
+	r.Add(5)
+	exceeded, total := r.CheckAndAdvance()
+	if exceeded {
+		t.Errorf("rate limit should not be exceeded")
+	}
+	if total != 5 {
+		t.Errorf("unexpected rate limit total: %d != 5", total)
+	}
+
+	r.Add(6)
+	exceeded, total = r.CheckAndAdvance()
+	if !exceeded {
+		t.Errorf("rate limit should be exceeded")
+	}
+	if total != 11 {
+		t.Errorf("unexpected rate limit total: %d != 11", total)
+	}
+
+	r.Add(1)
+	exceeded, total = r.CheckAndAdvance()
+	if exceeded {
+		t.Errorf("rate limit should not be exceeded")
+	}
+	if total != 7 {
+		t.Errorf("unexpected rate limit total: %d != 7", total)
+	}
+}
+
 func TestDefaultFromAddress(t *testing.T) {
 	defer patchHost("example.com", nil)()
 

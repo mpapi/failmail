@@ -16,6 +16,9 @@ func main() {
 		from       = flag.String("from", DefaultFromAddress("failmail"), "from address")
 		failDir    = flag.String("fail-dir", "failed", "write failed sends to this maildir")
 		allDir     = flag.String("all-dir", "", "write all sends to this maildir")
+		rateLimit  = flag.Int("rate-limit", 0, "alert if this many emails are received within a window")
+		rateCheck  = flag.Duration("rate-check", 1*time.Minute, "how often to check whether rate limit was exceeded")
+		rateWindow = flag.Int("rate-window", 5, "the size of the rate limit window, in check intervals")
 	)
 	flag.Parse()
 
@@ -31,6 +34,10 @@ func main() {
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
 	buffer := NewMessageBuffer(*waitPeriod, *maxWait, Header("X-Failmail-Split", ""), SameSubject())
+
+	// A `RateCounter` watches the rate at which incoming messages are arriving
+	// and can determine whether we've exceeded some threshold, for alerting.
+	rateCounter := NewRateCounter(*rateLimit, *rateWindow)
 
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.
@@ -57,6 +64,7 @@ func main() {
 	}
 
 	tick := time.Tick(1 * time.Second)
+	rateCheckTick := time.Tick(*rateCheck)
 	for {
 		select {
 		case <-tick:
@@ -68,8 +76,16 @@ func main() {
 					}
 				}
 			}
+		case <-rateCheckTick:
+			// Slide the window, and see if this interval trips the alert.
+			exceeded, count := rateCounter.CheckAndAdvance()
+			if exceeded {
+				// TODO actually send an email here, eventually
+				log.Printf("rate limit check exceeded: %d messages in the last %s", count, *rateCheck*time.Duration(*rateWindow))
+			}
 		case msg := <-received:
 			buffer.Add(msg)
+			rateCounter.Add(1)
 		}
 	}
 }
