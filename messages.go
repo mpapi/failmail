@@ -269,6 +269,13 @@ func ReplacedSubject(pattern string, replace string) GroupBy {
 	}
 }
 
+func MatchingSubject(pattern string) GroupBy {
+	re := regexp.MustCompile(pattern)
+	return func(r *ReceivedMessage) string {
+		return strings.Join(re.FindAllString(r.Message.Header.Get("Subject"), -1), "")
+	}
+}
+
 func SameSubject() GroupBy {
 	return func(r *ReceivedMessage) string {
 		return strings.TrimSpace(r.Message.Header.Get("Subject"))

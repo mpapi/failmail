@@ -9,16 +9,21 @@ import (
 
 func main() {
 	var (
-		bindAddr   = flag.String("bind", "localhost:2525", "local bind address")
-		relayAddr  = flag.String("relay", "localhost:25", "relay server address")
-		waitPeriod = flag.Duration("wait", 30*time.Second, "wait this long for more batchable messages")
-		maxWait    = flag.Duration("max-wait", 5*time.Minute, "wait at most this long from first message to send summary")
-		from       = flag.String("from", DefaultFromAddress("failmail"), "from address")
-		failDir    = flag.String("fail-dir", "failed", "write failed sends to this maildir")
-		allDir     = flag.String("all-dir", "", "write all sends to this maildir")
-		rateLimit  = flag.Int("rate-limit", 0, "alert if this many emails are received within a window")
-		rateCheck  = flag.Duration("rate-check", 1*time.Minute, "how often to check whether rate limit was exceeded")
-		rateWindow = flag.Int("rate-window", 5, "the size of the rate limit window, in check intervals")
+		bindAddr     = flag.String("bind", "localhost:2525", "local bind address")
+		relayAddr    = flag.String("relay", "localhost:25", "relay server address")
+		waitPeriod   = flag.Duration("wait", 30*time.Second, "wait this long for more batchable messages")
+		maxWait      = flag.Duration("max-wait", 5*time.Minute, "wait at most this long from first message to send summary")
+		from         = flag.String("from", DefaultFromAddress("failmail"), "from address")
+		failDir      = flag.String("fail-dir", "failed", "write failed sends to this maildir")
+		allDir       = flag.String("all-dir", "", "write all sends to this maildir")
+		rateLimit    = flag.Int("rate-limit", 0, "alert if this many emails are received within a window")
+		rateCheck    = flag.Duration("rate-check", 1*time.Minute, "how often to check whether rate limit was exceeded")
+		rateWindow   = flag.Int("rate-window", 5, "the size of the rate limit window, in check intervals")
+		batchHeader  = flag.String("batch-header", "X-Failmail-Split", "the name of the header to use to separate messages into summary mails")
+		batchReplace = flag.String("batch-subject-replace", "", "batch messages into summarizes whose subjects are the same after stripping out characters that match this regexp")
+		batchMatch   = flag.String("batch-subject-match", "", "batch messages into summarizes whose subjects are the same after using only the characters that match this regexp")
+		groupReplace = flag.String("group-subject-replace", "", "group messages within summarizes whose subjects are the same after stripping out characters that match this regexp")
+		groupMatch   = flag.String("group-subject-match", "", "group messages within summarizes whose subjects are the same after using only the characters that match this regexp")
 	)
 	flag.Parse()
 
@@ -31,9 +36,32 @@ func main() {
 	listener := &Listener{logger("listener"), *bindAddr}
 	go listener.Listen(received)
 
+	// Figure out how to batch messages into separate summary emails. By
+	// default, use the value of the --batch-header argument (falling back to
+	// empty string, meaning all messages end up in the same summary email).
+	var batch GroupBy
+	if *batchMatch != "" {
+		batch = MatchingSubject(*batchMatch)
+	} else if *batchReplace != "" {
+		batch = ReplacedSubject(*batchReplace, "*")
+	} else {
+		batch = Header(*batchHeader, "")
+	}
+
+	// Figure out how to group like messages within a summary. By default, those
+	// with the same subject are considered the same.
+	var group GroupBy
+	if *groupMatch != "" {
+		group = MatchingSubject(*groupMatch)
+	} else if *groupReplace != "" {
+		group = ReplacedSubject(*groupReplace, "*")
+	} else {
+		group = SameSubject()
+	}
+
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
-	buffer := NewMessageBuffer(*waitPeriod, *maxWait, Header("X-Failmail-Split", ""), SameSubject())
+	buffer := NewMessageBuffer(*waitPeriod, *maxWait, batch, group)
 
 	// A `RateCounter` watches the rate at which incoming messages are arriving
 	// and can determine whether we've exceeded some threshold, for alerting.
