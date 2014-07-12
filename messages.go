@@ -178,11 +178,15 @@ func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch Gr
 	}
 }
 
+func (b *MessageBuffer) checkWithinLimits(now time.Time, key string) bool {
+	return now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit
+}
+
 func (b *MessageBuffer) Flush(from string) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
 	for key, msgs := range b.messages {
-		if now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit {
+		if b.checkWithinLimits(now, key) {
 			continue
 		}
 		summaries = append(summaries, Summarize(b.Group, from, msgs))
@@ -202,6 +206,22 @@ func (b *MessageBuffer) Add(msg *ReceivedMessage) {
 	}
 	b.last[key] = now
 	b.messages[key] = append(b.messages[key], msg)
+}
+
+func (b *MessageBuffer) Stats() *BufferStats {
+	allMessages := 0
+	now := nowGetter()
+	for key, msgs := range b.messages {
+		if b.checkWithinLimits(now, key) {
+			allMessages += len(msgs)
+		}
+	}
+	return &BufferStats{len(b.messages), allMessages}
+}
+
+type BufferStats struct {
+	ActiveBatches  int
+	ActiveMessages int
 }
 
 // Tracks the number of arriving messages in a sliding window, to see whether
