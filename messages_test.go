@@ -38,6 +38,13 @@ func TestMessageBuffer(t *testing.T) {
 	if count := len(buf.messages); count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
+	stats := buf.Stats()
+	if stats.ActiveBatches != 1 {
+		t.Errorf("unexpected stats active batches count: %d", stats.ActiveBatches)
+	}
+	if stats.ActiveMessages != 2 {
+		t.Errorf("unexpected stats active messages count: %d", stats.ActiveMessages)
+	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650008, 0))
@@ -62,6 +69,14 @@ func TestMessageBuffer(t *testing.T) {
 	}
 	if subject := summaries[0].Subject; subject != "[failmail] 2 messages" {
 		t.Errorf("unexpected summary subject: %s", subject)
+	}
+
+	stats = buf.Stats()
+	if stats.ActiveBatches != 0 {
+		t.Errorf("unexpected stats active batches count: %d", stats.ActiveBatches)
+	}
+	if stats.ActiveMessages != 0 {
+		t.Errorf("unexpected stats active messages count: %d", stats.ActiveMessages)
 	}
 	unpatch()
 }
