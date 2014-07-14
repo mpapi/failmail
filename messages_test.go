@@ -147,6 +147,14 @@ func TestReplacedSubject(t *testing.T) {
 	}
 }
 
+func TestMatchingSubject(t *testing.T) {
+	groupBy := MatchingSubject(`^myapp: `)
+	key := groupBy(makeReceivedMessage(t, "Subject: myapp: error in foo\r\n\r\ntest\r\n"))
+	if key != "myapp: " {
+		t.Errorf("unexpected grouping: %s", key)
+	}
+}
+
 func TestSameSubject(t *testing.T) {
 	groupBy := SameSubject()
 	key := groupBy(makeReceivedMessage(t, "Subject: test\r\n\r\ntest\r\n"))
