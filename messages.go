@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -51,6 +52,14 @@ func (r *ReceivedMessage) Body() string {
 	} else {
 		r.bodyCached = body
 		return string(body)
+	}
+}
+
+func (r *ReceivedMessage) DisplayDate(def string) string {
+	if d, err := r.Message.Header.Date(); err != nil {
+		return def
+	} else {
+		return d.Format(time.RFC822)
 	}
 }
 
@@ -104,22 +113,27 @@ type SummaryMessage struct {
 	UniqueMessages   []*UniqueMessage
 }
 
-func (s *SummaryMessage) Bytes() []byte {
-	buf := new(bytes.Buffer)
-
+func (s *SummaryMessage) writeHeaders(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "From: %s\r\n", s.From)
 	fmt.Fprintf(buf, "To: %s\r\n", strings.Join(s.To, ", "))
 	fmt.Fprintf(buf, "Subject: %s\r\n", s.Subject)
 	fmt.Fprintf(buf, "Date: %s\r\n", s.Date.Format(time.RFC822))
 	fmt.Fprintf(buf, "\r\n")
+}
+
+func (s *SummaryMessage) Render(tmpl *template.Template) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	s.writeHeaders(buf)
+	err := tmpl.Execute(buf, s)
+	return buf.Bytes(), err
+}
+
+func (s *SummaryMessage) Bytes() []byte {
+	buf := new(bytes.Buffer)
+	s.writeHeaders(buf)
 
 	for _, msg := range s.ReceivedMessages {
-		var date string
-		if d, err := msg.Message.Header.Date(); err != nil {
-			date = "?"
-		} else {
-			date = d.Format(time.RFC822)
-		}
+		date := msg.DisplayDate("?")
 		subject := msg.Message.Header.Get("subject")
 		fmt.Fprintf(buf, "%s: %s\r\n", date, subject)
 	}
