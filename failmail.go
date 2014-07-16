@@ -26,6 +26,9 @@ func main() {
 		groupMatch   = flag.String("group-subject-match", "", "group messages within summarizes whose subjects are the same after using only the characters that match this regexp")
 		bindHTTP     = flag.String("bind-http", "localhost:8025", "local bind address for the HTTP server")
 		relayAll     = flag.Bool("relay-all", false, "relay all messages to the upstream server")
+
+		relayUser     = flag.String("relay-user", "", "username for auth to relay server")
+		relayPassword = flag.String("relay-password", "", "password for auth to relay server")
 	)
 	flag.Parse()
 
@@ -75,7 +78,7 @@ func main() {
 	if *relayAddr == "debug" {
 		upstream = &DebugUpstream{os.Stdout}
 	} else {
-		upstream = &LiveUpstream{logger("upstream"), *relayAddr}
+		upstream = &LiveUpstream{logger("upstream"), *relayAddr, *relayUser, *relayPassword}
 	}
 
 	if *allDir != "" {
