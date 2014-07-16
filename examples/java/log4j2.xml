@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="warn" name="FailmailClientTest" packages="">
+  <Appenders>
+    <SMTP name="Mail" subject="Error Log" to="errors@example.com" from="test@example.com"
+      smtpHost="localhost" smtpPort="2525" bufferSize="50"></SMTP>
+  </Appenders>
+  <Loggers>
+    <Root level="error">
+      <AppenderRef ref="Mail"/>
+    </Root>
+  </Loggers>
+</Configuration>
