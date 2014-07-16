@@ -13,6 +13,17 @@ import (
 	"time"
 )
 
+type OutgoingParts struct {
+	From        string
+	To          []string
+	Bytes       []byte
+	Description string
+}
+
+type OutgoingMessage interface {
+	Parts() *OutgoingParts
+}
+
 // A message received from an SMTP client. These get compacted into
 // `UniqueMessage`s, many which are then periodically sent via an upstream
 // server in a `SummaryMessage`.
@@ -61,6 +72,11 @@ func (r *ReceivedMessage) DisplayDate(def string) string {
 	} else {
 		return d.Format(time.RFC822)
 	}
+}
+
+func (r *ReceivedMessage) Parts() *OutgoingParts {
+	subj := r.Message.Header.Get("subject")
+	return &OutgoingParts{r.From, r.To, []byte(r.Body()), subj}
 }
 
 // A `UniqueMessage` is the result of compacting similar `ReceivedMessage`s.
@@ -144,6 +160,10 @@ func (s *SummaryMessage) Bytes() []byte {
 		fmt.Fprintf(buf, "\r\n%s\r\n- %s\r\n%s\r\n", unique.Template, unique.Subject, unique.Body)
 	}
 	return buf.Bytes()
+}
+
+func (s *SummaryMessage) Parts() *OutgoingParts {
+	return &OutgoingParts{s.From, s.To, s.Bytes(), s.Subject}
 }
 
 func Summarize(group GroupBy, from string, received []*ReceivedMessage) *SummaryMessage {

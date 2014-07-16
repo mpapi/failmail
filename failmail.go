@@ -25,6 +25,7 @@ func main() {
 		groupReplace = flag.String("group-subject-replace", "", "group messages within summarizes whose subjects are the same after stripping out characters that match this regexp")
 		groupMatch   = flag.String("group-subject-match", "", "group messages within summarizes whose subjects are the same after using only the characters that match this regexp")
 		bindHTTP     = flag.String("bind-http", "localhost:8025", "local bind address for the HTTP server")
+		relayAll     = flag.Bool("relay-all", false, "relay all messages to the upstream server")
 	)
 	flag.Parse()
 
@@ -117,6 +118,9 @@ func main() {
 		case msg := <-received:
 			buffer.Add(msg)
 			rateCounter.Add(1)
+			if *relayAll {
+				upstream.Send(msg)
+			}
 		}
 	}
 }

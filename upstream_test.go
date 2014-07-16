@@ -23,7 +23,7 @@ type errorUpstream struct {
 	Error error
 }
 
-func (u *errorUpstream) Send(s *SummaryMessage) error {
+func (u *errorUpstream) Send(m OutgoingMessage) error {
 	return u.Error
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 type Upstream interface {
-	Send(*SummaryMessage) error
+	Send(OutgoingMessage) error
 }
 
 type LiveUpstream struct {
@@ -15,17 +15,19 @@ type LiveUpstream struct {
 	Addr string
 }
 
-func (u *LiveUpstream) Send(s *SummaryMessage) error {
-	u.Printf("sending summary: %s", s.Subject)
-	return smtp.SendMail(u.Addr, nil, s.From, s.To, s.Bytes())
+func (u *LiveUpstream) Send(m OutgoingMessage) error {
+	parts := m.Parts()
+	u.Printf("sending: %s", parts.Description)
+	return smtp.SendMail(u.Addr, nil, parts.From, parts.To, parts.Bytes)
 }
 
 type DebugUpstream struct {
 	Output io.Writer
 }
 
-func (u *DebugUpstream) Send(s *SummaryMessage) error {
-	u.Output.Write(s.Bytes())
+func (u *DebugUpstream) Send(m OutgoingMessage) error {
+	parts := m.Parts()
+	u.Output.Write(parts.Bytes)
 	return nil
 }
 
@@ -33,8 +35,9 @@ type MaildirUpstream struct {
 	Maildir *Maildir
 }
 
-func (u *MaildirUpstream) Send(s *SummaryMessage) error {
-	u.Maildir.Write(s.Bytes())
+func (u *MaildirUpstream) Send(m OutgoingMessage) error {
+	parts := m.Parts()
+	u.Maildir.Write(parts.Bytes)
 	return nil
 }
 
@@ -46,9 +49,9 @@ func NewMultiUpstream(upstreams ...Upstream) Upstream {
 	return &MultiUpstream{upstreams}
 }
 
-func (u *MultiUpstream) Send(s *SummaryMessage) error {
+func (u *MultiUpstream) Send(m OutgoingMessage) error {
 	for _, upstream := range u.upstreams {
-		if err := upstream.Send(s); err != nil {
+		if err := upstream.Send(m); err != nil {
 			return err
 		}
 	}
