@@ -70,7 +70,7 @@ func (r *ReceivedMessage) DisplayDate(def string) string {
 	if d, err := r.Message.Header.Date(); err != nil {
 		return def
 	} else {
-		return d.Format(time.RFC822)
+		return d.Format(time.RFC1123Z)
 	}
 }
 

@@ -16,6 +16,36 @@ func TestReceivedMessageBody(t *testing.T) {
 	}
 }
 
+func TestReceivedMessageDisplayDate(t *testing.T) {
+	msg := makeReceivedMessage(t, "Subject: test\r\n\r\ntest body\r\n")
+	if date := msg.DisplayDate("default"); date != "default" {
+		t.Errorf("unexpected display date: %s", date)
+	}
+
+	msg = makeReceivedMessage(t, "Date: Wed, 16 Jul 2014 16:00:00 -0400\r\nSubject: test\r\n\r\ntest body\r\n")
+	if date := msg.DisplayDate("default"); date != "Wed, 16 Jul 2014 16:00:00 -0400" {
+		t.Errorf("unexpected display date: %s", date)
+	}
+}
+
+func TestReceivedMessageOutgoingParts(t *testing.T) {
+	msg := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nSubject: test\r\n\r\ntest body\r\n")
+	parts := msg.Parts()
+
+	if parts.From != "test@example.com" {
+		t.Errorf("unexpected From part: %s", parts.From)
+	}
+	if len(parts.To) != 1 || parts.To[0] != "test2@example.com" {
+		t.Errorf("unexpected To part: %s", parts.To)
+	}
+	if string(parts.Bytes) != "test body\r\n" {
+		t.Errorf("unexpected Bytes part: %s", parts.Bytes)
+	}
+	if parts.Description != "test" {
+		t.Errorf("unexpected Description part: %s", parts.Description)
+	}
+}
+
 func TestMessageBuffer(t *testing.T) {
 	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject())
 
