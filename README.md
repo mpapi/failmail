@@ -46,6 +46,14 @@ maildir (`--fail-dir="failed"`; readable by e.g. `mutt`, or any text editor).
 If the `--all-dir` option is given, `failmail` will write any email it gets to
 a maildir for inspection, debugging, or archival.
 
+
+## Configuration examples
+
+See the `examples` directory for code snippets for your favorite programming
+language/logging framework. (If there's one that you'd like to see, feel free
+to open an issue or submit a pull request.)
+
+
 ## Todo
 
 Work in progress, ideas good and bad, and otherwise:
