@@ -191,13 +191,14 @@ func Summarize(group GroupBy, from string, received []*ReceivedMessage) *Summary
 }
 
 type MessageBuffer struct {
-	SoftLimit time.Duration
-	HardLimit time.Duration
-	Batch     GroupBy // determines how messages are split into summary emails
-	Group     GroupBy // determines how messages are grouped within summary emails
-	first     map[string]time.Time
-	last      map[string]time.Time
-	messages  map[string][]*ReceivedMessage
+	SoftLimit    time.Duration
+	HardLimit    time.Duration
+	Batch        GroupBy // determines how messages are split into summary emails
+	Group        GroupBy // determines how messages are grouped within summary emails
+	first        map[string]time.Time
+	last         map[string]time.Time
+	messages     map[string][]*ReceivedMessage
+	lastReceived time.Time
 }
 
 func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy) *MessageBuffer {
@@ -209,6 +210,7 @@ func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch Gr
 		make(map[string]time.Time),
 		make(map[string]time.Time),
 		make(map[string][]*ReceivedMessage),
+		time.Time{},
 	}
 }
 
@@ -240,6 +242,7 @@ func (b *MessageBuffer) Add(msg *ReceivedMessage) {
 	}
 	b.last[key] = now
 	b.messages[key] = append(b.messages[key], msg)
+	b.lastReceived = now
 }
 
 func (b *MessageBuffer) Stats() *BufferStats {
@@ -250,12 +253,13 @@ func (b *MessageBuffer) Stats() *BufferStats {
 			allMessages += len(msgs)
 		}
 	}
-	return &BufferStats{len(b.messages), allMessages}
+	return &BufferStats{len(b.messages), allMessages, b.lastReceived}
 }
 
 type BufferStats struct {
 	ActiveBatches  int
 	ActiveMessages int
+	LastReceived   time.Time
 }
 
 // Tracks the number of arriving messages in a sliding window, to see whether
