@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"net"
 	"net/smtp"
+	"os/exec"
 )
 
 type Upstream interface {
@@ -51,6 +53,17 @@ func (u *MaildirUpstream) Send(m OutgoingMessage) error {
 	parts := m.Parts()
 	u.Maildir.Write(parts.Bytes)
 	return nil
+}
+
+type ExecUpstream struct {
+	Command string
+}
+
+func (u *ExecUpstream) Send(m OutgoingMessage) error {
+	parts := m.Parts()
+	cmd := exec.Command("sh", "-c", u.Command)
+	cmd.Stdin = bytes.NewBuffer(parts.Bytes)
+	return cmd.Run()
 }
 
 type MultiUpstream struct {

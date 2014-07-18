@@ -29,6 +29,8 @@ func main() {
 
 		relayUser     = flag.String("relay-user", "", "username for auth to relay server")
 		relayPassword = flag.String("relay-password", "", "password for auth to relay server")
+
+		relayCommand = flag.String("relay-command", "", "relay messages by running this command and passing the message to stdin")
 	)
 	flag.Parse()
 
@@ -87,6 +89,10 @@ func main() {
 			log.Fatalf("failed to create maildir for all messages at %s: %s", *allDir, err)
 		}
 		upstream = NewMultiUpstream(&MaildirUpstream{allMaildir}, upstream)
+	}
+
+	if *relayCommand != "" {
+		upstream = NewMultiUpstream(&ExecUpstream{*relayCommand}, upstream)
 	}
 
 	// Any messages we were unable to send upstream will be written to this
