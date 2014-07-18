@@ -1,3 +1,5 @@
+// Implementations for receiving incoming email messages and placing them them
+// on a sendable channel for batching/summarizing/processing.
 package main
 
 import (
@@ -7,9 +9,11 @@ import (
 	"net"
 )
 
+// Listener binds a socket on an address, and accepts email messages via SMTP
+// on each incoming connection.
 type Listener struct {
 	*log.Logger
-	Addr string
+	Addr string // address to listen on, as host:port
 }
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
@@ -28,11 +32,17 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage) {
 			continue
 		}
 
+		// Handle each incoming connection in its own goroutine.
 		l.Printf("handling new connection: %s", conn)
 		go l.handleConnection(conn, received)
 	}
 }
 
+// handleConnection reads SMTP commands from a socket and writes back SMTP
+// responses. Since it takes several commands (MAIL, RCPT, DATA) to fully
+// describe a message, `Session` is used to keep track of the progress building
+// a message. When a message has been fully communicated by a downstream
+// client, it's put on the `received` channel for later batching/summarizing.
 func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *ReceivedMessage) {
 	defer conn.Close()
 
