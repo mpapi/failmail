@@ -54,6 +54,28 @@ language/logging framework. (If there's one that you'd like to see, feel free
 to open an issue or submit a pull request.)
 
 
+## Development
+
+    $ export GOPATH=...
+    $ go get -d github.com/hut8labs/failmail
+    $ cd $GOPATH/src/github.com/hut8labs/failmail
+    $ ...
+    $ go fmt
+    $ go build
+    $ go test
+    $ git commit && git push ...
+
+
+Other helpful testing tools include the `smtp-source` and `smtp-sink` commands,
+which are part of Postfix (and are in the Debian `postfix` package):
+
+    $ smtp-source -v -m 50 127.0.0.1:2525  # send 50 messages to failmail
+
+The Python debugging SMTP server is also useful as an upstream server:
+
+    python -m smtpd -n -c DebuggingServer localhost:3025
+
+
 ## Todo
 
 Work in progress, ideas good and bad, and otherwise:
