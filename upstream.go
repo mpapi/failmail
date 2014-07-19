@@ -1,3 +1,5 @@
+// Implementations for sending/relaying email messages, based around the
+// `OutgoingMessage` interface.
 package main
 
 import (
@@ -9,17 +11,25 @@ import (
 	"os/exec"
 )
 
+// `Upstream` is the interface that wraps the method to send an
+// `OutgoingMessage`.
 type Upstream interface {
 	Send(OutgoingMessage) error
 }
 
+// A `LiveUpstream` represents an upstream SMTP server that we can connect to
+// for sending email messages.
 type LiveUpstream struct {
 	*log.Logger
-	Addr     string
+	Addr string
+
+	// Used for PLAIN auth if non-empty.
 	User     string
 	Password string
 }
 
+// Builds an Auth object, or nil if no authentication should be used to connect
+// to this upstream server.
 func (u *LiveUpstream) auth() smtp.Auth {
 	if len(u.User) == 0 && len(u.Password) == 0 {
 		return nil
