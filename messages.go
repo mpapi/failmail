@@ -89,7 +89,7 @@ type UniqueMessage struct {
 	Count    int
 }
 
-// Returns for `UniqueMessage` for each distinct key among the received
+// `Compact` returns a `UniqueMessage` for each distinct key among the received
 // messages, using the regular expression `sanitize` to create a representative
 // template body for the `UniqueMessage`.
 func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
@@ -148,17 +148,29 @@ func (s *SummaryMessage) Bytes() []byte {
 	buf := new(bytes.Buffer)
 	s.writeHeaders(buf)
 
-	for _, msg := range s.ReceivedMessages {
-		date := msg.DisplayDate("?")
-		subject := msg.Message.Header.Get("subject")
-		fmt.Fprintf(buf, "%s: %s\r\n", date, subject)
+	total := 0
+	var firstMessageTime time.Time
+	var lastMessageTime time.Time
+
+	body := new(bytes.Buffer)
+	for i, unique := range s.UniqueMessages {
+		fmt.Fprintf(body, "\r\n- Message group %d of %d: %d instances\r\n", i+1, len(s.UniqueMessages), unique.Count)
+		fmt.Fprintf(body, "  From %s to %s\r\n\r\n", unique.Start.Format(time.RFC1123Z), unique.End.Format(time.RFC1123Z))
+		fmt.Fprintf(body, "Subject: %#v\r\nBody:\r\n%s\r\n", unique.Subject, unique.Body)
+
+		total += unique.Count
+		if firstMessageTime.IsZero() || unique.Start.Before(firstMessageTime) {
+			firstMessageTime = unique.Start
+		}
+		if lastMessageTime.IsZero() || unique.End.After(lastMessageTime) {
+			lastMessageTime = unique.End
+		}
 	}
 
-	for _, unique := range s.UniqueMessages {
-		fmt.Fprintf(buf, "\r\n# %d instances\r\n", unique.Count)
-		fmt.Fprintf(buf, "* %s - %s\r\n", unique.Start.Format(time.RFC822), unique.End.Format(time.RFC822))
-		fmt.Fprintf(buf, "\r\n%s\r\n- %s\r\n%s\r\n", unique.Template, unique.Subject, unique.Body)
-	}
+	fmt.Fprintf(buf, "--- Failmail ---\r\n")
+	fmt.Fprintf(buf, "Total messages: %d\r\nUnique messages: %d\r\n", total, len(s.UniqueMessages))
+	fmt.Fprintf(buf, "Oldest message: %s\r\nNewest message: %s\r\n", firstMessageTime.Format(time.RFC1123Z), lastMessageTime.Format(time.RFC1123Z))
+	fmt.Fprintf(buf, "%s", body.Bytes())
 	return buf.Bytes()
 }
 
