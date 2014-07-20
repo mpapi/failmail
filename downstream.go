@@ -33,7 +33,7 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage) {
 		}
 
 		// Handle each incoming connection in its own goroutine.
-		l.Printf("handling new connection: %s", conn)
+		l.Printf("handling new connection from %s", conn.RemoteAddr())
 		go l.handleConnection(conn, received)
 	}
 }
@@ -68,6 +68,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 			resp, msg := session.ReadData(reader)
 			resp.WriteTo(writer)
 			if msg != nil {
+				l.Printf("received message with subject %#v", msg.Message.Header.Get("Subject"))
 				received <- msg
 			}
 		}
