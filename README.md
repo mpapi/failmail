@@ -23,23 +23,16 @@ emails through another SMTP server. Its primary design goals are:
 
 ## Usage
 
-    $ failmail --help
-    Usage of ./failmail:
-      --all-dir="": write all sends to this maildir
-      --bind="localhost:2525": local bind address
-      --fail-dir="failed": write failed sends to this maildir
-      --from="failmail@myhostname": from address
-      --max-wait=5m0s: wait at most this long from first message to send summary
-      --relay="localhost:25": relay server address
-      --wait=30s: wait this long for more batchable messages
+See `failmail --help` for a full listing of supported options.
 
-So by default, `failmail` listens on the local port 2525
+By default, `failmail` listens on the local port 2525
 (`--bind="localhost:2525"`), and relays mail to another SMTP server (e.g.
 Postfix) running on the local default SMTP port (`--relay="localhost:25"`). It
 receives messages and rolls them into summaries based on their subjects,
 sending a summary email out 30 seconds (`--wait=30s`) after it stops receiving
 messages with those subjects, delaying no more than a total of 5 minutes
-(`--wait=5m`).
+(`--wait=5m`). Each summary is sent to the union of all of the recipients of
+the messages in the summary.
 
 Any summary emails that it can't send via the server on port 25, it writes to a
 maildir (`--fail-dir="failed"`; readable by e.g. `mutt`, or any text editor).
@@ -52,6 +45,20 @@ a maildir for inspection, debugging, or archival.
 See the `examples` directory for code snippets for your favorite programming
 language/logging framework. (If there's one that you'd like to see, feel free
 to open an issue or submit a pull request.)
+
+
+## Deploying
+
+For now, the best way to run `failmail` in production is via a tool like
+`supervisord`, `runit`, or `daemontools`. Here's an example `supervisord`
+configuration:
+
+    [program:failmail]
+    command=/usr/local/bin/failmail --relay="smtp.mycompany.example.com:25"
+    autorestart=true
+    autostart=true
+    stderr_logfile=/var/log/failmail.err
+    stdout_logfile=/var/log/failmail.out
 
 
 ## Development
