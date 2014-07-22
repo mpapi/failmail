@@ -50,7 +50,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 	writer := bufio.NewWriter(conn)
 
 	session := new(Session)
-	session.Start().WriteTo(writer)
+	session.Start(false).WriteTo(writer)
 
 	for {
 		resp, err := session.ReadCommand(reader)

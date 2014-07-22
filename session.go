@@ -37,17 +37,19 @@ type stringReader interface {
 }
 
 type Session struct {
-	Received *ReceivedMessage
-	hostname string
-	parser   Parser
+	Received      *ReceivedMessage
+	Authenticated bool
+	hostname      string
+	parser        Parser
 }
 
 // Sets up a session and returns the `Response` that should be sent to a
 // client immediately after it connects.
-func (s *Session) Start() Response {
+func (s *Session) Start(authRequired bool) Response {
 	s.initHostname()
 	s.parser = SMTPParser()
 	s.Received = &ReceivedMessage{}
+	s.Authenticated = !authRequired
 
 	return Response{220, fmt.Sprintf("%s Hi there", s.hostname)}
 }
@@ -124,6 +126,14 @@ func (s *Session) ReadData(reader stringReader) (Response, *ReceivedMessage) {
 	return s.setData(data.String())
 }
 
+func (s *Session) authRequired(command *parse.Node) bool {
+	switch strings.ToLower(command.Text) {
+	case "quit", "helo", "ehlo", "rset", "noop":
+		return false
+	}
+	return !s.Authenticated
+}
+
 // Advances the state of the session according to the parsed SMTP command, and
 // returns an appropriate `Response`. For example, the MAIL command modifies
 // the session to store the sender's address and to expect future commands to
@@ -136,6 +146,10 @@ func (s *Session) Advance(node *parse.Node) Response {
 	command, ok := node.Get("command")
 	if !ok {
 		return Response{500, "Parse error"}
+	}
+
+	if s.authRequired(command) {
+		return Response{530, "Authentication required"}
 	}
 
 	switch strings.ToLower(command.Text) {
