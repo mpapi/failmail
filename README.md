@@ -21,9 +21,14 @@ configuration change in your application.
 
 ## Installation
 
+To download and build from source:
+
     $ export GOPATH=...
     $ go get -u github.com/hut8labs/failmail
     $ $GOPATH/bin/failmail
+
+Or, for 64-bit Linux, you can grab a binary of the [latest
+release](https://github.com/hut8labs/failmail/releases/latest).
 
 
 ## Usage
