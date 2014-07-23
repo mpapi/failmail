@@ -1,17 +1,22 @@
 # Failmail
 
-Failmail is an SMTP proxy that receives emails, collecting the emails it gets
-within a configurable interval into summary emails, and sends the summary
-emails through another SMTP server. Its primary design goals are:
+Failmail is an SMTP proxy server that deduplicates and summarizes the emails it
+receives. It typically sits between an application and the SMTP server that
+application would use to send alerts or exception emails, and prevents the
+application from overwhelming its operators with a flood of email.
 
-1. to help both human operators of e.g. a web application or system under
-   observation to understand the errors and notifications that come from such a
-   system
+Its primary goals are:
+
+1. to help the human operators of an application or system under observation to
+   understand the errors and notifications that come from the system
 2. to prevent an upstream SMTP server from throttling or dropping messages
    under a high volume of errors/alerts
-3. to be easier to interoperate with than its predecessor,
+3. to be easier to set up and use than its predecessor,
    [failnozzle](http://github.com/wingu/failnozzle), which had strict
    assumptions about the nature and format of incoming messages
+
+Failmail is language/framework/tool-agnostic, and usually only requires a small
+configuration change in your application.
 
 
 ## Installation
