@@ -46,6 +46,32 @@ func TestReceivedMessageOutgoingParts(t *testing.T) {
 	}
 }
 
+func TestCompact(t *testing.T) {
+	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
+	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
+	uniques := Compact(SameSubject(), []*ReceivedMessage{msg1, msg2})
+	if count := len(uniques); count != 1 {
+		t.Errorf("expected one unique message from Compact(), got %d", count)
+	}
+
+	unique := uniques[0]
+	if start := unique.Start.Format(time.RFC1123Z); start != "Tue, 01 Jul 2014 12:34:56 -0400" {
+		t.Errorf("unexpected range start from Compact(): %s", start)
+	}
+	if end := unique.End.Format(time.RFC1123Z); end != "Wed, 02 Jul 2014 12:34:56 -0400" {
+		t.Errorf("unexpected range end from Compact(): %s", end)
+	}
+	if unique.Subject != "test" {
+		t.Errorf("unexpected subject from Compact(): %s", unique.Subject)
+	}
+	if unique.Body != "test body 2\r\n" {
+		t.Errorf("unexpected body from Compact(): %s", unique.Body)
+	}
+	if unique.Count != 2 {
+		t.Errorf("unexpected count from Compact(): %d", unique.Count)
+	}
+}
+
 func TestMessageBuffer(t *testing.T) {
 	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject())
 
