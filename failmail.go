@@ -2,10 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
 )
+
+const VERSION = "0.1.0"
 
 func main() {
 	var (
@@ -31,8 +34,19 @@ func main() {
 		relayPassword = flag.String("relay-password", "", "password for auth to relay server")
 
 		relayCommand = flag.String("relay-command", "", "relay messages by running this command and passing the message to stdin")
+
+		version = flag.Bool("version", false, "show the version number and exit")
 	)
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Failmail %s\n\nUsage of %s:\n", VERSION, os.Args[0])
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+
+	if *version {
+		fmt.Fprintf(os.Stderr, "Failmail %s\n", VERSION)
+		return
+	}
 
 	// A channel for incoming messages. The listener sends on the channel, and
 	// receives are added to a MessageBuffer in the channel consumer below.
