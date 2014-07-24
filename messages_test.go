@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -69,6 +70,23 @@ func TestCompact(t *testing.T) {
 	}
 	if unique.Count != 2 {
 		t.Errorf("unexpected count from Compact(): %d", unique.Count)
+	}
+}
+
+func TestSummarize(t *testing.T) {
+	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
+	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
+
+	summarized := Summarize(SameSubject(), "failmail@example.com", []*ReceivedMessage{msg1, msg2})
+
+	if summarized.From != "failmail@example.com" {
+		t.Errorf("unexpected from address from Summarize(): %s", summarized.From)
+	}
+	if !reflect.DeepEqual(summarized.To, []string{"test2@example.com", "test3@example.com"}) {
+		t.Errorf("unexpected to address from Summarize(): %#v", summarized.To)
+	}
+	if summarized.Subject != "[failmail] 2 messages" {
+		t.Errorf("unexpected subject from Summarize(): %s", summarized.Subject)
 	}
 }
 
