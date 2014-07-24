@@ -41,8 +41,8 @@ Postfix) running on the local default SMTP port (`--relay="localhost:25"`). It
 receives messages and rolls them into summaries based on their subjects,
 sending a summary email out 30 seconds (`--wait=30s`) after it stops receiving
 messages with those subjects, delaying no more than a total of 5 minutes
-(`--wait=5m`). Each summary is sent to the union of all of the recipients of
-the messages in the summary.
+(`--max-wait=5m`). Each summary is sent to the union of all of the recipients
+of the messages in the summary.
 
 Any summary emails that it can't send via the server on port 25, it writes to a
 maildir (`--fail-dir="failed"`; readable by e.g. `mutt`, or any text editor).
