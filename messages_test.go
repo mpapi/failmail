@@ -2,10 +2,17 @@ package main
 
 import (
 	"fmt"
+	"net/mail"
 	"reflect"
 	"testing"
 	"time"
 )
+
+type BadReader struct{}
+
+func (r BadReader) Read(p []byte) (int, error) {
+	return 0, fmt.Errorf("bad reader")
+}
 
 func TestReceivedMessageBody(t *testing.T) {
 	msg := makeReceivedMessage(t, "Subject: test\r\n\r\ntest body\r\n")
@@ -14,6 +21,27 @@ func TestReceivedMessageBody(t *testing.T) {
 	}
 	if body := msg.Body(); body != "test body\r\n" {
 		t.Errorf("unexpected message body on 2nd call: %s", body)
+	}
+}
+
+func TestReceivedMessageBodyMissingMessage(t *testing.T) {
+	msg := &ReceivedMessage{
+		From:    "test@example.com",
+		To:      []string{"test@example.com"},
+		Message: &mail.Message{Body: BadReader{}},
+	}
+	if body := msg.Body(); body != "[unreadable message body]" {
+		t.Errorf("unexpected message body for nil message: %s", body)
+	}
+}
+
+func TestReceivedMessageBodyUnreadableMessage(t *testing.T) {
+	msg := &ReceivedMessage{
+		From: "test@example.com",
+		To:   []string{"test@example.com"},
+	}
+	if body := msg.Body(); body != "[no message body]" {
+		t.Errorf("unexpected message body for nil message: %s", body)
 	}
 }
 
