@@ -13,7 +13,9 @@ import (
 // on each incoming connection.
 type Listener struct {
 	*log.Logger
-	Addr string // address to listen on, as host:port
+	Addr      string // address to listen on, as host:port
+	conns     int
+	connLimit int
 }
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
@@ -32,9 +34,16 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage) {
 			continue
 		}
 
+		l.conns += 1
+
 		// Handle each incoming connection in its own goroutine.
 		l.Printf("handling new connection from %s", conn.RemoteAddr())
 		go l.handleConnection(conn, received)
+
+		if l.connLimit > 0 && l.conns >= l.connLimit {
+			l.Printf("reached %d connections, stopping downstream listener", l.conns)
+			break
+		}
 	}
 }
 

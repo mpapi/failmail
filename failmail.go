@@ -54,7 +54,7 @@ func main() {
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	listener := &Listener{logger("listener"), *bindAddr}
+	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr}
 	go listener.Listen(received)
 
 	// Figure out how to batch messages into separate summary emails. By
