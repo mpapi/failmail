@@ -48,12 +48,12 @@ func TestListener(t *testing.T) {
 }
 
 func TestListenerWithMessage(t *testing.T) {
-	listener := &Listener{Logger: testLogger, Addr: "localhost:40025", connLimit: 1}
+	listener := &Listener{Logger: testLogger, Addr: "localhost:40026", connLimit: 1}
 	received := make(chan *ReceivedMessage, 1)
 	done := make(chan bool, 0)
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40025")
+		conn, err := textproto.Dial("tcp", "localhost:40026")
 		if err != nil {
 			t.Fatalf("failed to connect to listener: %s", err)
 		}
