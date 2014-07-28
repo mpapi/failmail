@@ -23,3 +23,14 @@ func TestInvalid(t *testing.T) {
 		t.Errorf("expected nil parse result from failed parse, got %s", parsed)
 	}
 }
+
+func TestLongest(t *testing.T) {
+	parser := Longest(Literal("test"), Literal("testing"))
+	rest, parsed := parser.Parse("testing 123")
+	if rest != " 123" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "testing" {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
+}

@@ -51,6 +51,32 @@ func (p *parseAny) Parse(str string) (string, *Node) {
 	return str, nil
 }
 
+type parseLongest struct {
+	Parsers []Parser
+}
+
+func Longest(parsers ...Parser) *parseLongest {
+	return &parseLongest{parsers}
+}
+
+func (p *parseLongest) Add(parsers ...Parser) *parseLongest {
+	p.Parsers = append(p.Parsers, parsers...)
+	return p
+}
+
+func (p *parseLongest) Parse(str string) (string, *Node) {
+	longestRest := ""
+	longestNode := (*Node)(nil)
+	for _, parser := range p.Parsers {
+		rest, node := parser.Parse(str)
+		if longestNode == nil || (node != nil && len(rest) < len(longestRest)) {
+			longestRest = rest
+			longestNode = node
+		}
+	}
+	return longestRest, longestNode
+}
+
 // Construct that parses but throws away the result.
 type parseOmit struct {
 	Parser Parser
