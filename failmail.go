@@ -52,6 +52,12 @@ func main() {
 	// receives are added to a MessageBuffer in the channel consumer below.
 	received := make(chan *ReceivedMessage, 64)
 
+	// A channel for outgoing messages.
+	sending := make(chan OutgoingMessage, 64)
+
+	// TODO add a signal handler for clean shutdown with flush.
+	done := make(chan bool, 0)
+
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
 	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr}
@@ -60,25 +66,11 @@ func main() {
 	// Figure out how to batch messages into separate summary emails. By
 	// default, use the value of the --batch-header argument (falling back to
 	// empty string, meaning all messages end up in the same summary email).
-	var batch GroupBy
-	if *batchMatch != "" {
-		batch = MatchingSubject(*batchMatch)
-	} else if *batchReplace != "" {
-		batch = ReplacedSubject(*batchReplace, "*")
-	} else {
-		batch = Header(*batchHeader, "")
-	}
+	batch := buildBatch(*batchMatch, *batchReplace, *batchHeader)
 
-	// Figure out how to group like messages within a summary. By default, those
-	// with the same subject are considered the same.
-	var group GroupBy
-	if *groupMatch != "" {
-		group = MatchingSubject(*groupMatch)
-	} else if *groupReplace != "" {
-		group = ReplacedSubject(*groupReplace, "*")
-	} else {
-		group = SameSubject()
-	}
+	// Figure out how to group like messages within a summary. By default,
+	// those with the same subject are considered the same.
+	group := buildGroup(*groupMatch, *groupReplace)
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
@@ -90,23 +82,9 @@ func main() {
 
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.
-	var upstream Upstream
-	if *relayAddr == "debug" {
-		upstream = &DebugUpstream{os.Stdout}
-	} else {
-		upstream = &LiveUpstream{logger("upstream"), *relayAddr, *relayUser, *relayPassword}
-	}
-
-	if *allDir != "" {
-		allMaildir := &Maildir{Path: *allDir}
-		if err := allMaildir.Create(); err != nil {
-			log.Fatalf("failed to create maildir for all messages at %s: %s", *allDir, err)
-		}
-		upstream = NewMultiUpstream(&MaildirUpstream{allMaildir}, upstream)
-	}
-
-	if *relayCommand != "" {
-		upstream = NewMultiUpstream(&ExecUpstream{*relayCommand}, upstream)
+	upstream, err := buildUpstream(*relayAddr, *relayUser, *relayPassword, *allDir, *relayCommand)
+	if err != nil {
+		log.Fatalf("failed to create upstream: %s", err)
 	}
 
 	// Any messages we were unable to send upstream will be written to this
@@ -117,33 +95,85 @@ func main() {
 	}
 
 	go ListenHTTP(*bindHTTP, buffer)
+	go sendUpstream(sending, upstream, failedMaildir)
+	run(buffer, *from, rateCounter, *rateCheck, *rateWindow, received, sending, done, *relayAll)
+}
+
+func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
+	for msg := range sending {
+		if sendErr := upstream.Send(msg); sendErr != nil {
+			log.Printf("couldn't send message: %s", sendErr)
+			if saveErr := failedMaildir.Write(msg.Parts().Bytes); saveErr != nil {
+				log.Printf("couldn't save message: %s", saveErr)
+			}
+		}
+	}
+}
+
+func run(buffer *MessageBuffer, from string, rateCounter *RateCounter, rateCheck time.Duration, rateWindow int, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
 
 	tick := time.Tick(1 * time.Second)
-	rateCheckTick := time.Tick(*rateCheck)
+	rateCheckTick := time.Tick(rateCheck)
+
 	for {
 		select {
 		case <-tick:
-			for _, summary := range buffer.Flush(*from) {
-				if sendErr := upstream.Send(summary); sendErr != nil {
-					log.Printf("couldn't send message: %s", sendErr)
-					if saveErr := failedMaildir.Write(summary.Bytes()); saveErr != nil {
-						log.Printf("couldn't save message: %s", saveErr)
-					}
-				}
+			for _, summary := range buffer.Flush(from) {
+				sending <- summary
 			}
 		case <-rateCheckTick:
 			// Slide the window, and see if this interval trips the alert.
 			exceeded, count := rateCounter.CheckAndAdvance()
 			if exceeded {
 				// TODO actually send an email here, eventually
-				log.Printf("rate limit check exceeded: %d messages in the last %s", count, *rateCheck*time.Duration(*rateWindow))
+				log.Printf("rate limit check exceeded: %d messages in the last %s", count, rateCheck*time.Duration(rateWindow))
 			}
 		case msg := <-received:
 			buffer.Add(msg)
 			rateCounter.Add(1)
-			if *relayAll {
-				upstream.Send(msg)
+			if relayAll {
+				sending <- msg
 			}
 		}
 	}
+}
+
+func buildBatch(batchMatch, batchReplace, batchHeader string) GroupBy {
+	if batchMatch != "" {
+		return MatchingSubject(batchMatch)
+	} else if batchReplace != "" {
+		return ReplacedSubject(batchReplace, "*")
+	}
+	return Header(batchHeader, "")
+}
+
+func buildGroup(groupMatch, groupReplace string) GroupBy {
+	if groupMatch != "" {
+		return MatchingSubject(groupMatch)
+	} else if groupReplace != "" {
+		return ReplacedSubject(groupReplace, "*")
+	}
+	return SameSubject()
+}
+
+func buildUpstream(relayAddr, relayUser, relayPassword, allDir, relayCommand string) (Upstream, error) {
+	var upstream Upstream
+	if relayAddr == "debug" {
+		upstream = &DebugUpstream{os.Stdout}
+	} else {
+		upstream = &LiveUpstream{logger("upstream"), relayAddr, relayUser, relayPassword}
+	}
+
+	if allDir != "" {
+		allMaildir := &Maildir{Path: allDir}
+		if err := allMaildir.Create(); err != nil {
+			return upstream, err
+		}
+		upstream = NewMultiUpstream(&MaildirUpstream{allMaildir}, upstream)
+	}
+
+	if relayCommand != "" {
+		upstream = NewMultiUpstream(&ExecUpstream{relayCommand}, upstream)
+	}
+	return upstream, nil
 }
