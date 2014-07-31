@@ -207,18 +207,20 @@ type MessageBuffer struct {
 	HardLimit    time.Duration
 	Batch        GroupBy // determines how messages are split into summary emails
 	Group        GroupBy // determines how messages are grouped within summary emails
+	From         string
 	first        map[string]time.Time
 	last         map[string]time.Time
 	messages     map[string][]*ReceivedMessage
 	lastReceived time.Time
 }
 
-func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy) *MessageBuffer {
+func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy, from string) *MessageBuffer {
 	return &MessageBuffer{
 		softLimit,
 		hardLimit,
 		batch,
 		group,
+		from,
 		make(map[string]time.Time),
 		make(map[string]time.Time),
 		make(map[string][]*ReceivedMessage),
@@ -230,14 +232,14 @@ func (b *MessageBuffer) checkWithinLimits(now time.Time, key string) bool {
 	return now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit
 }
 
-func (b *MessageBuffer) Flush(from string) []*SummaryMessage {
+func (b *MessageBuffer) Flush() []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
 	for key, msgs := range b.messages {
 		if b.checkWithinLimits(now, key) {
 			continue
 		}
-		summaries = append(summaries, Summarize(b.Group, from, msgs))
+		summaries = append(summaries, Summarize(b.Group, b.From, msgs))
 		delete(b.messages, key)
 		delete(b.first, key)
 		delete(b.last, key)

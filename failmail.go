@@ -74,7 +74,7 @@ func main() {
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
-	buffer := NewMessageBuffer(*waitPeriod, *maxWait, batch, group)
+	buffer := NewMessageBuffer(*waitPeriod, *maxWait, batch, group, *from)
 
 	// A `RateCounter` watches the rate at which incoming messages are arriving
 	// and can determine whether we've exceeded some threshold, for alerting.
@@ -96,7 +96,7 @@ func main() {
 
 	go ListenHTTP(*bindHTTP, buffer)
 	go sendUpstream(sending, upstream, failedMaildir)
-	run(buffer, *from, rateCounter, *rateCheck, *rateWindow, received, sending, done, *relayAll)
+	run(buffer, rateCounter, *rateCheck, received, sending, done, *relayAll)
 }
 
 func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
@@ -110,7 +110,7 @@ func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaild
 	}
 }
 
-func run(buffer *MessageBuffer, from string, rateCounter *RateCounter, rateCheck time.Duration, rateWindow int, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
+func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
 
 	tick := time.Tick(1 * time.Second)
 	rateCheckTick := time.Tick(rateCheck)
@@ -118,7 +118,7 @@ func run(buffer *MessageBuffer, from string, rateCounter *RateCounter, rateCheck
 	for {
 		select {
 		case <-tick:
-			for _, summary := range buffer.Flush(from) {
+			for _, summary := range buffer.Flush() {
 				sending <- summary
 			}
 		case <-rateCheckTick:
@@ -126,7 +126,7 @@ func run(buffer *MessageBuffer, from string, rateCounter *RateCounter, rateCheck
 			exceeded, count := rateCounter.CheckAndAdvance()
 			if exceeded {
 				// TODO actually send an email here, eventually
-				log.Printf("rate limit check exceeded: %d messages in the last %s", count, rateCheck*time.Duration(rateWindow))
+				log.Printf("rate limit check exceeded: %d messages", count)
 			}
 		case msg := <-received:
 			buffer.Add(msg)

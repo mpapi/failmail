@@ -119,7 +119,7 @@ func TestSummarize(t *testing.T) {
 }
 
 func TestMessageBuffer(t *testing.T) {
-	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject())
+	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject(), "test@example.com")
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
@@ -130,7 +130,7 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650004, 0))
-	if summaries := buf.Flush("test@example.com"); len(summaries) != 0 {
+	if summaries := buf.Flush(); len(summaries) != 0 {
 		t.Errorf("unexpected summaries from flush: %s", summaries)
 	}
 	unpatch()
@@ -150,13 +150,13 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650008, 0))
-	if summaries := buf.Flush("test@example.com"); len(summaries) != 0 {
+	if summaries := buf.Flush(); len(summaries) != 0 {
 		t.Errorf("unexpected summaries from flush: %s", summaries)
 	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650009, 0))
-	summaries := buf.Flush("test@example.com")
+	summaries := buf.Flush()
 	if len(summaries) != 1 {
 		t.Errorf("unexpected summaries from flush: %s", summaries)
 	}
