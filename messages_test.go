@@ -183,6 +183,27 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 }
 
+func TestFlushForce(t *testing.T) {
+	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject(), "test@example.com")
+
+	unpatch := patchTime(time.Unix(1393650000, 0))
+	defer unpatch()
+	buf.Add(makeReceivedMessage(t, "Subject: test\r\n\r\ntest 1"))
+	if count := len(buf.messages); count != 1 {
+		t.Errorf("unexpected buffer message count: %d", count)
+	}
+	unpatch()
+
+	unpatch = patchTime(time.Unix(1393650004, 0))
+	if summaries := buf.Flush(false); len(summaries) != 0 {
+		t.Errorf("unexpected summaries from flush: %s", summaries)
+	}
+	if summaries := buf.Flush(true); len(summaries) != 1 {
+		t.Errorf("unexpected summaries from flush: expected 1, got %d", len(summaries))
+	}
+	unpatch()
+}
+
 func TestRateCounter(t *testing.T) {
 	r := NewRateCounter(10, 2)
 	r.Add(5)
