@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -55,8 +57,16 @@ func main() {
 	// A channel for outgoing messages.
 	sending := make(chan OutgoingMessage, 64)
 
-	// TODO add a signal handler for clean shutdown with flush.
-	done := make(chan bool, 0)
+	// Handle SIGINT and SIGTERM for cleaner shutdown.
+	signals := make(chan os.Signal, 1)
+	done := make(chan bool, 1)
+	go func() {
+		for sig := range signals {
+			log.Printf("caught signal %s", sig)
+			done <- true
+		}
+	}()
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
@@ -95,8 +105,8 @@ func main() {
 	}
 
 	go ListenHTTP(*bindHTTP, buffer)
-	go sendUpstream(sending, upstream, failedMaildir)
-	run(buffer, rateCounter, *rateCheck, received, sending, done, *relayAll)
+	go run(buffer, rateCounter, *rateCheck, received, sending, done, *relayAll)
+	sendUpstream(sending, upstream, failedMaildir)
 }
 
 func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
@@ -108,6 +118,7 @@ func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaild
 			}
 		}
 	}
+	log.Printf("done sending")
 }
 
 func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
@@ -118,7 +129,7 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 	for {
 		select {
 		case <-tick:
-			for _, summary := range buffer.Flush() {
+			for _, summary := range buffer.Flush(false) {
 				sending <- summary
 			}
 		case <-rateCheckTick:
@@ -134,6 +145,13 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 			if relayAll {
 				sending <- msg
 			}
+		case <-done:
+			log.Printf("cleaning up")
+			for _, summary := range buffer.Flush(true) {
+				sending <- summary
+			}
+			close(sending)
+			break
 		}
 	}
 }

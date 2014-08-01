@@ -232,11 +232,11 @@ func (b *MessageBuffer) checkWithinLimits(now time.Time, key string) bool {
 	return now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit
 }
 
-func (b *MessageBuffer) Flush() []*SummaryMessage {
+func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
 	for key, msgs := range b.messages {
-		if b.checkWithinLimits(now, key) {
+		if !force && b.checkWithinLimits(now, key) {
 			continue
 		}
 		summaries = append(summaries, Summarize(b.Group, b.From, msgs))
