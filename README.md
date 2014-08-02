@@ -105,4 +105,6 @@ Work in progress, ideas good and bad, and otherwise:
   number of incoming emails excceeds some limit (there's currently an
   experimental implementation that logs rather than sending email)
 * shell script hooks: run a shell command after sending a summary email
+* SSL/TLS support
+* downstream AUTH
 * ...
