@@ -64,7 +64,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 	for {
 		resp, err := session.ReadCommand(reader)
 		if err != nil {
-			l.Printf("error reading from client:", err)
+			l.Printf("error reading from client: %s", err)
 			break
 		}
 

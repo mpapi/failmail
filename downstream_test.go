@@ -1,13 +1,30 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/textproto"
+	"strings"
 	"testing"
 )
 
 var testLogger = log.New(ioutil.Discard, "", log.LstdFlags)
+
+type BadClient struct{}
+
+func (b BadClient) Read(p []byte) (int, error) {
+	return 0, fmt.Errorf("bad read from bad client")
+}
+
+func (b BadClient) Write(p []byte) (int, error) {
+	return 0, nil
+}
+
+func (b BadClient) Close() error {
+	return nil
+}
 
 func TestListener(t *testing.T) {
 	listener := &Listener{Logger: testLogger, Addr: "localhost:40025", connLimit: 1}
@@ -80,6 +97,16 @@ func TestListenerWithMessage(t *testing.T) {
 
 	listener.Listen(received)
 	<-done
+}
+
+func TestListenerWithBadClient(t *testing.T) {
+	buf := new(bytes.Buffer)
+	l := &Listener{log.New(buf, "", log.LstdFlags), "", 0, 0}
+	received := make(chan *ReceivedMessage, 1)
+	l.handleConnection(BadClient{}, received)
+	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {
+		t.Errorf("bad client didn't trigger failure in handleConnection(): %#v", msg)
+	}
 }
 
 func sendAndExpect(conn *textproto.Conn, t *testing.T, line string, code int) {
