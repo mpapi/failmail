@@ -131,3 +131,22 @@ func TestBatchConfig(t *testing.T) {
 		t.Errorf("expected message batch '100', got %#v", key)
 	}
 }
+
+func TestGroupConfig(t *testing.T) {
+	msg := makeReceivedMessage(t, "Subject: that test\r\nX-Batch: 100\r\n\r\ntest body\r\n")
+
+	group := buildGroup("^(this|that)", "^(this|that)")
+	if key := group(msg); key != "that" {
+		t.Errorf("expected message group 'that', got %#v", key)
+	}
+
+	group = buildGroup("", "^(this|that)")
+	if key := group(msg); key != "* test" {
+		t.Errorf("expected message group '* test', got %#v", key)
+	}
+
+	group = buildGroup("", "")
+	if key := group(msg); key != "that test" {
+		t.Errorf("expected message group 'that test', got %#v", key)
+	}
+}
