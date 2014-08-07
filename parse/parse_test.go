@@ -34,3 +34,14 @@ func TestLongest(t *testing.T) {
 		t.Errorf("parsed unexpected fragment: %s", parsed)
 	}
 }
+
+func TestOmit(t *testing.T) {
+	parser := Omit(Literal("test"))
+	rest, parsed := parser.Parse("test 123")
+	if rest != " 123" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "" || len(parsed.Children) > 0 {
+		t.Errorf("unexpected parse result: %#v", parsed)
+	}
+}
