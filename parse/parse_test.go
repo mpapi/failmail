@@ -58,3 +58,23 @@ func TestLabel(t *testing.T) {
 		t.Errorf("unexpected parse result: %s", labeled)
 	}
 }
+
+func TestSeries(t *testing.T) {
+	parser := Series(Label("first", Longest(Literal("test"), Literal("testing"))),
+		Label("second", Literal(" 123")))
+	rest, parsed := parser.Parse("testing 123")
+	if rest != "" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "testing 123" {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	} else {
+		if labeled, ok := parsed.Get("first"); !ok || labeled.Text != "testing" {
+			t.Errorf("unexpected parse result: %s", labeled)
+		}
+		if labeled, ok := parsed.Get("second"); !ok || labeled.Text != " 123" {
+			t.Errorf("unexpected parse result: %s", labeled)
+		}
+	}
+
+}
