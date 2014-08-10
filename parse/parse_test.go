@@ -76,5 +76,23 @@ func TestSeries(t *testing.T) {
 			t.Errorf("unexpected parse result: %s", labeled)
 		}
 	}
+}
 
+func TestRegexp(t *testing.T) {
+	parser := Regexp(`\w+ \d+`)
+	rest, parsed := parser.Parse("testing 123")
+	if rest != "" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "testing 123" {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
+
+	rest, parsed = parser.Parse("123 testing")
+	if rest != "123 testing" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed != nil {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
 }
