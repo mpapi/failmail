@@ -96,3 +96,14 @@ func TestRegexp(t *testing.T) {
 		t.Errorf("parsed unexpected fragment: %s", parsed)
 	}
 }
+
+func TestRepeat(t *testing.T) {
+	parser := Repeat(3, Series(Regexp(`\w+`), Literal("\n")))
+	rest, parsed := parser.Parse("first\nsecond\nthird\n")
+	if rest != "" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "first\nsecond\nthird\n" {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
+}
