@@ -107,3 +107,14 @@ func TestRepeat(t *testing.T) {
 		t.Errorf("parsed unexpected fragment: %s", parsed)
 	}
 }
+
+func TestSurrounding(t *testing.T) {
+	parser := Surrounding(`"`, `"`, Regexp(`\w+`))
+	rest, parsed := parser.Parse(`"testing"`)
+	if rest != "" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "testing" {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
+}
