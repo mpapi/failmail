@@ -1,5 +1,7 @@
 # Failmail
 
+[![Build Status](https://travis-ci.org/hut8labs/failmail.svg?branch=master)](https://travis-ci.org/hut8labs/failmail)
+
 Failmail is an SMTP proxy server that deduplicates and summarizes the emails it
 receives. It typically sits between an application and the SMTP server that
 application would use to send alerts or exception emails, and prevents the
