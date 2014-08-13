@@ -9,6 +9,7 @@ import (
 type Node struct {
 	Text     string
 	Children map[string]*Node
+	Next     *Node
 }
 
 func (n *Node) Get(token string) (*Node, bool) {
@@ -83,7 +84,7 @@ type parseOmit struct {
 }
 
 func (p *parseOmit) Parse(str string) (string, *Node) {
-	node := &Node{"", make(map[string]*Node)}
+	node := &Node{"", make(map[string]*Node), nil}
 	rest, child := p.Parser.Parse(str)
 	if child == nil {
 		return str, nil
@@ -105,7 +106,7 @@ func (p *parseLabel) Parse(str string) (string, *Node) {
 	if child == nil {
 		return str, nil
 	}
-	return rest, &Node{child.Text, map[string]*Node{p.Label: child}}
+	return rest, &Node{child.Text, map[string]*Node{p.Label: child}, nil}
 }
 
 func Label(label string, parser Parser) *parseLabel {
@@ -126,7 +127,8 @@ func (p *parseSeries) Add(parsers ...Parser) *parseSeries {
 }
 
 func (p *parseSeries) Parse(str string) (string, *Node) {
-	node := &Node{"", make(map[string]*Node)}
+	node := &Node{"", make(map[string]*Node), nil}
+	last := node
 	var rest string = str
 	var child *Node
 	for _, parser := range p.Parsers {
@@ -138,6 +140,8 @@ func (p *parseSeries) Parse(str string) (string, *Node) {
 		for key, value := range child.Children {
 			node.Children[key] = value
 		}
+		last.Next = child
+		last = last.Next
 	}
 	return rest, node
 }
@@ -163,7 +167,7 @@ func (p *parseLiteral) Parse(str string) (string, *Node) {
 	if !strings.HasPrefix(check, p.Literal) {
 		return str, nil
 	}
-	return str[len(p.Literal):], &Node{str[:len(p.Literal)], nil}
+	return str[len(p.Literal):], &Node{str[:len(p.Literal)], nil, nil}
 }
 
 type parseRegexp struct {
@@ -181,7 +185,7 @@ func (p *parseRegexp) Parse(str string) (string, *Node) {
 	if len(match) == 0 {
 		return str, nil
 	}
-	return str[len(match):], &Node{match, nil}
+	return str[len(match):], &Node{match, nil, nil}
 }
 
 func Repeat(times int, p Parser) Parser {
@@ -205,4 +209,32 @@ func Separating(str string, parsers ...Parser) Parser {
 		parser.Add(p)
 	}
 	return parser
+}
+
+type parseZeroOrMore struct {
+	Parser Parser
+}
+
+func ZeroOrMore(p Parser) Parser {
+	return &parseZeroOrMore{p}
+}
+
+func (p *parseZeroOrMore) Parse(str string) (string, *Node) {
+	node := &Node{"", make(map[string]*Node), nil}
+	last := node
+	var rest string = str
+	var child *Node
+	for {
+		rest, child = p.Parser.Parse(rest)
+		if child == nil {
+			return rest, node
+		}
+		node.Text += child.Text
+		for key, value := range child.Children {
+			node.Children[key] = value
+		}
+		last.Next = child
+		last = last.Next
+	}
+	return rest, node
 }

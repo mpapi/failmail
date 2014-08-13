@@ -118,3 +118,30 @@ func TestSurrounding(t *testing.T) {
 		t.Errorf("parsed unexpected fragment: %s", parsed)
 	}
 }
+
+func TestZeroOrMore(t *testing.T) {
+	digits := Series(Regexp(`[0-9]+`), Literal("\n"))
+	parser := ZeroOrMore(digits)
+
+	rest, parsed := parser.Parse("first\nsecond\nthird\n")
+	if rest != "first\nsecond\nthird\n" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "" || len(parsed.Children) != 0 || parsed.Next != nil {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
+
+	rest, parsed = parser.Parse("1\n2\nthird\n")
+	if rest != "third\n" {
+		t.Errorf("parser left unexpected string: %s", rest)
+	}
+	if parsed == nil || parsed.Text != "1\n2\n" {
+		t.Errorf("parsed unexpected fragment: %s", parsed)
+	}
+	if parsed.Next == nil || parsed.Next.Text != "1\n" {
+		t.Errorf("unexpected first parsed fragment: %s", parsed)
+	}
+	if parsed.Next == nil || parsed.Next.Next == nil || parsed.Next.Next.Text != "2\n" {
+		t.Errorf("unexpected second parsed fragment: %s", parsed)
+	}
+}
