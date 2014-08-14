@@ -128,7 +128,6 @@ func (p *parseSeries) Add(parsers ...Parser) *parseSeries {
 
 func (p *parseSeries) Parse(str string) (string, *Node) {
 	node := &Node{"", make(map[string]*Node), nil}
-	last := node
 	var rest string = str
 	var child *Node
 	for _, parser := range p.Parsers {
@@ -140,8 +139,6 @@ func (p *parseSeries) Parse(str string) (string, *Node) {
 		for key, value := range child.Children {
 			node.Children[key] = value
 		}
-		last.Next = child
-		last = last.Next
 	}
 	return rest, node
 }
