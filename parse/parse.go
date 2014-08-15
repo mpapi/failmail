@@ -233,5 +233,4 @@ func (p *parseZeroOrMore) Parse(str string) (string, *Node) {
 		last.Next = child
 		last = last.Next
 	}
-	return rest, node
 }

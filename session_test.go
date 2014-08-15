@@ -99,7 +99,7 @@ func TestSessionAdvance(t *testing.T) {
 		t.Errorf("nil node is not a parse error")
 	}
 
-	if resp := s.Advance(&p.Node{"", make(map[string]*p.Node), nil}); resp.Code != 500 {
+	if resp := s.Advance(&p.Node{Text: "", Children: make(map[string]*p.Node), Next: nil}); resp.Code != 500 {
 		t.Errorf("empty node is not a parse error")
 	}
 

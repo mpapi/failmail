@@ -131,7 +131,7 @@ func TestMessageBuffer(t *testing.T) {
 
 	unpatch = patchTime(time.Unix(1393650004, 0))
 	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %s", summaries)
+		t.Errorf("unexpected summaries from flush: %v", summaries)
 	}
 	unpatch()
 
@@ -151,14 +151,14 @@ func TestMessageBuffer(t *testing.T) {
 
 	unpatch = patchTime(time.Unix(1393650008, 0))
 	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %s", summaries)
+		t.Errorf("unexpected summaries from flush: %v", summaries)
 	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650009, 0))
 	summaries := buf.Flush(false)
 	if len(summaries) != 1 {
-		t.Errorf("unexpected summaries from flush: %s", summaries)
+		t.Errorf("unexpected summaries from flush: %v", summaries)
 	}
 	if count := len(buf.messages); count != 0 {
 		t.Errorf("unexpected buffer message count: %d", count)
@@ -196,7 +196,7 @@ func TestFlushForce(t *testing.T) {
 
 	unpatch = patchTime(time.Unix(1393650004, 0))
 	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %s", summaries)
+		t.Errorf("unexpected summaries from flush: %v", summaries)
 	}
 	if summaries := buf.Flush(true); len(summaries) != 1 {
 		t.Errorf("unexpected summaries from flush: expected 1, got %d", len(summaries))
