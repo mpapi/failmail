@@ -1,12 +1,15 @@
 package configure
 
 import (
+	"flag"
 	"fmt"
 	p "github.com/hut8labs/failmail/parse"
 	"io"
 	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
+	"time"
 )
 
 func ConfigParser() p.Parser {
@@ -42,7 +45,6 @@ func ReadConfig(reader io.Reader, config interface{}) (err error) {
 	settings := walk(parsed)
 	bind(settings, config)
 	return
-
 }
 
 func walk(parsed *p.Node) map[string]string {
@@ -57,16 +59,91 @@ func walk(parsed *p.Node) map[string]string {
 	return settings
 }
 
-func bind(settings map[string]string, config interface{}) {
-	configPtr := reflect.ValueOf(config)
-	configStruct := configPtr.Elem()
-	configType := configStruct.Type()
+type field struct {
+	Definition reflect.StructField
+	Value      reflect.Value
+}
 
-	for i := 0; i < configType.NumField(); i++ {
-		fieldType := configType.Field(i)
-		fieldValue := configStruct.Field(i)
-		if value, ok := settings[strings.ToLower(fieldType.Name)]; ok {
-			fieldValue.Set(reflect.ValueOf(value))
+func fields(structPointer interface{}) []*field {
+	result := make([]*field, 0)
+
+	pointerValue := reflect.ValueOf(structPointer)
+	structValue := pointerValue.Elem()
+	structType := structValue.Type()
+
+	for i := 0; i < structType.NumField(); i++ {
+		fieldType := structType.Field(i)
+		fieldValue := structValue.Field(i)
+		result = append(result, &field{fieldType, fieldValue})
+	}
+	return result
+}
+
+func bind(settings map[string]string, config interface{}) {
+	for _, f := range fields(config) {
+		if value, ok := settings[strings.ToLower(f.Definition.Name)]; ok {
+			f.Value.Set(reflect.ValueOf(value))
 		}
 	}
+}
+
+func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandling) (*flag.FlagSet, map[string]reflect.Value, *string) {
+	flagset := flag.NewFlagSet(os.Args[0], errorHandling)
+
+	values := make(map[string]reflect.Value, 0)
+	for _, f := range fields(configWithDefaults) {
+		flagName := strings.ToLower(f.Definition.Name)
+		flagHelp := string(f.Definition.Tag)
+		values[flagName] = f.Value
+
+		switch {
+		case reflect.TypeOf("").AssignableTo(f.Definition.Type):
+			flagset.String(flagName, f.Value.Interface().(string), flagHelp)
+		case reflect.TypeOf(true).AssignableTo(f.Definition.Type):
+			flagset.Bool(flagName, f.Value.Interface().(bool), flagHelp)
+		case reflect.TypeOf(0.0).AssignableTo(f.Definition.Type):
+			flagset.Float64(flagName, f.Value.Interface().(float64), flagHelp)
+		case reflect.TypeOf(0).AssignableTo(f.Definition.Type):
+			flagset.Int(flagName, f.Value.Interface().(int), flagHelp)
+		case reflect.TypeOf(time.Duration(0)).AssignableTo(f.Definition.Type):
+			flagset.Duration(flagName, f.Value.Interface().(time.Duration), flagHelp)
+		}
+	}
+
+	configFile := flagset.String("config", "", "path to a config file")
+
+	return flagset, values, configFile
+}
+
+func Parse(configWithDefaults interface{}) error {
+	flagset, _, configFile := buildFlagSet(configWithDefaults, flag.ContinueOnError)
+	flagset.Usage = func() {}
+
+	err := flagset.Parse(os.Args[1:])
+
+	if *configFile != "" {
+		file, err := os.Open(*configFile)
+		if err != nil {
+			return err
+		}
+
+		err = ReadConfig(file, configWithDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	flagset2, fieldValues, _ := buildFlagSet(configWithDefaults, flag.ExitOnError)
+
+	err = flagset2.Parse(os.Args[1:])
+	if err != nil {
+		return err
+	}
+	flagset2.VisitAll(func(f *flag.Flag) {
+		if fieldValue, ok := fieldValues[f.Name]; ok {
+			fieldValue.Set(reflect.ValueOf(f.Value.(flag.Getter).Get()))
+		}
+	})
+
+	return nil
 }
