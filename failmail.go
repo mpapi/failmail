@@ -37,6 +37,8 @@ func main() {
 
 		relayCommand = flag.String("relay-command", "", "relay messages by running this command and passing the message to stdin")
 
+		script = flag.String("script", "", "SMTP session script to run")
+
 		version = flag.Bool("version", false, "show the version number and exit")
 	)
 	flag.Usage = func() {
@@ -102,6 +104,14 @@ func main() {
 	failedMaildir := &Maildir{Path: *failDir}
 	if err := failedMaildir.Create(); err != nil {
 		log.Fatalf("failed to create maildir for failed messages at %s: %s", *failDir, err)
+	}
+
+	if *script != "" {
+		runner, err := runScript(*script)
+		if err != nil {
+			log.Fatalf("failed to run script file %s: %s", *script, err)
+		}
+		go runner(done)
 	}
 
 	go ListenHTTP(*bindHTTP, buffer)
