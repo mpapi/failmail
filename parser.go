@@ -8,7 +8,7 @@ type Parser func(string) *p.Node
 
 func SMTPParser() func(string) *p.Node {
 	space := p.Regexp(`\s+`)
-	name := p.Regexp(`[a-zA-z]([a-zA-Z0-9-]*[a-zA-Z0-9])?`)
+	name := p.Regexp(`[a-zA-Z]([a-zA-Z0-9-]*[a-zA-Z0-9])?`)
 
 	domain := p.Any()
 	domain.Add(p.Separating(".", name, domain), name)
