@@ -53,7 +53,12 @@ func SMTPParser() func(string) *p.Node {
 	vrfy := Line(Command("VRFY"), space, p.Label("text", str))
 	ehlo := Line(Command("EHLO"), space, p.Label("domain", p.Any(addressLiteral, domain)))
 
-	smtp := p.Any(helo, mail, rcpt, data, rset, noop, quit, ehlo, vrfy)
+	// RFC 4954
+	authType := p.Regexp(`[A-Z0-9\-_]+`)
+	base64Str := p.Regexp(`[a-zA-Z0-9+/=]+`)
+	auth := Line(Command("AUTH"), space, p.Label("type", authType), space, p.Label("payload", base64Str))
+
+	smtp := p.Any(helo, mail, rcpt, data, rset, noop, quit, ehlo, vrfy, auth)
 
 	return func(str string) *p.Node {
 		_, node := smtp.Parse(str)

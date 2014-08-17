@@ -22,6 +22,9 @@ var parserTests = []ParserTestCase{
 	ParserTestCase{ok, "HELO example.com\r\n"},
 	ParserTestCase{failed, "HELO\r\n"},
 	ParserTestCase{ok, "VRFY user\r\n"},
+	ParserTestCase{ok, "AUTH PLAIN dGVzdA==\r\n"},
+	ParserTestCase{failed, "AUTH badtype dGVzdA==\r\n"},
+	ParserTestCase{failed, "AUTH PLAIN notb64*=\r\n"},
 }
 
 func TestSMTPParser(t *testing.T) {
