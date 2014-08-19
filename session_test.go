@@ -53,6 +53,18 @@ func TestResponseWriteTo(t *testing.T) {
 	}
 }
 
+func TestResponseWriteToMultiLine(t *testing.T) {
+	output := new(bytes.Buffer)
+	buf := bufio.NewWriter(output)
+
+	Response{250, "host1.example.com Hello host2.example.com\r\nAUTH PLAIN"}.WriteTo(buf)
+
+	contents := string(output.Bytes())
+	if contents != "250-host1.example.com Hello host2.example.com\r\n250 AUTH PLAIN\r\n" {
+		t.Errorf("unexpected response: %s", contents)
+	}
+}
+
 func TestSessionStart(t *testing.T) {
 	s := new(Session)
 	resp := s.Start(false)
