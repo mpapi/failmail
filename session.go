@@ -28,7 +28,19 @@ func (r Response) NeedsData() bool {
 
 // TODO return error
 func (r Response) WriteTo(writer *bufio.Writer) {
-	writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, r.Text))
+	text := strings.TrimSpace(r.Text)
+	lines := strings.Split(text, "\r\n")
+	if len(lines) > 1 {
+		for index, line := range lines {
+			if index < len(lines)-1 {
+				writer.WriteString(fmt.Sprintf("%d-%s\r\n", r.Code, line))
+			} else {
+				writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, line))
+			}
+		}
+	} else {
+		writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, r.Text))
+	}
 	writer.Flush()
 }
 
