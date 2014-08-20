@@ -56,7 +56,9 @@ func SMTPParser() func(string) *p.Node {
 	// RFC 4954
 	authType := p.Regexp(`[A-Z0-9\-_]+`)
 	base64Str := p.Regexp(`[a-zA-Z0-9+/=]+`)
-	auth := Line(Command("AUTH"), space, p.Label("type", authType), space, p.Label("payload", base64Str))
+	authWithoutPayload := Line(Command("AUTH"), space, p.Label("type", authType))
+	authWithPayload := Line(Command("AUTH"), space, p.Label("type", authType), space, p.Label("payload", base64Str))
+	auth := p.Longest(authWithPayload, authWithoutPayload)
 
 	smtp := p.Any(helo, mail, rcpt, data, rset, noop, quit, ehlo, vrfy, auth)
 
