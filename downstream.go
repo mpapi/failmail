@@ -14,6 +14,7 @@ import (
 type Listener struct {
 	*log.Logger
 	Addr      string // address to listen on, as host:port
+	Auth      Auth
 	conns     int
 	connLimit int
 }
@@ -59,7 +60,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 	writer := bufio.NewWriter(conn)
 
 	session := new(Session)
-	session.Start(false).WriteTo(writer)
+	session.Start(l.Auth).WriteTo(writer)
 
 	for {
 		resp, err := session.ReadCommand(reader)
@@ -80,6 +81,9 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 				l.Printf("received message with subject %#v", msg.Message.Header.Get("Subject"))
 				received <- msg
 			}
+		case resp.NeedsAuthResponse():
+			resp := session.ReadAuthResponse(reader)
+			resp.WriteTo(writer)
 		}
 	}
 }

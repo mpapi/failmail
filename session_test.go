@@ -67,7 +67,7 @@ func TestResponseWriteToMultiLine(t *testing.T) {
 
 func TestSessionStart(t *testing.T) {
 	s := new(Session)
-	resp := s.Start(false)
+	resp := s.Start(nil)
 
 	if s.Received == nil {
 		t.Errorf("start should set up a message")
@@ -80,7 +80,7 @@ func TestSessionStart(t *testing.T) {
 
 func TestSessionReadCommand(t *testing.T) {
 	s := new(Session)
-	s.Start(false)
+	s.Start(nil)
 
 	buf := bytes.NewBufferString("HELO test.example.com\r\n")
 	resp, err := s.ReadCommand(buf)
@@ -105,7 +105,7 @@ func TestSessionReadCommand(t *testing.T) {
 
 func TestSessionAdvance(t *testing.T) {
 	s := new(Session)
-	s.Start(false)
+	s.Start(nil)
 
 	if resp := s.Advance(nil); resp.Code != 500 {
 		t.Errorf("nil node is not a parse error")

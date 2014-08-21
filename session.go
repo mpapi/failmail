@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"github.com/hut8labs/failmail/parse"
 	"net/mail"
@@ -20,6 +21,10 @@ type Response struct {
 
 func (r Response) IsClose() bool {
 	return r.Code == 221
+}
+
+func (r Response) NeedsAuthResponse() bool {
+	return r.Code == 334
 }
 
 func (r Response) NeedsData() bool {
@@ -48,20 +53,41 @@ type stringReader interface {
 	ReadString(delim byte) (string, error)
 }
 
+type Auth interface {
+	ValidCredentials(string) (bool, error)
+}
+
+type SingleUserPlainAuth struct {
+	Username string
+	Password string
+}
+
+func (a *SingleUserPlainAuth) ValidCredentials(token string) (bool, error) {
+	parts := strings.Split(token, "\x00")
+	if len(parts) != 3 {
+		return false, fmt.Errorf("invalid token")
+	}
+
+	valid := parts[1] == a.Username && parts[2] == a.Password
+	return valid, nil
+}
+
 type Session struct {
 	Received      *ReceivedMessage
 	Authenticated bool
 	hostname      string
 	parser        Parser
+	auth          Auth
 }
 
 // Sets up a session and returns the `Response` that should be sent to a
 // client immediately after it connects.
-func (s *Session) Start(authRequired bool) Response {
+func (s *Session) Start(auth Auth) Response {
 	s.initHostname()
 	s.parser = SMTPParser()
 	s.Received = &ReceivedMessage{}
-	s.Authenticated = !authRequired
+	s.Authenticated = auth == nil
+	s.auth = auth
 
 	return Response{220, fmt.Sprintf("%s Hi there", s.hostname)}
 }
@@ -138,12 +164,50 @@ func (s *Session) ReadData(reader stringReader) (Response, *ReceivedMessage) {
 	return s.setData(data.String())
 }
 
+func (s *Session) ReadAuthResponse(reader stringReader) Response {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return Response{500, "Parse error"}
+	}
+	return s.checkCredentials(line)
+}
+
 func (s *Session) authRequired(command *parse.Node) bool {
 	switch strings.ToLower(command.Text) {
-	case "quit", "helo", "ehlo", "rset", "noop":
+	case "quit", "helo", "ehlo", "rset", "noop", "auth":
 		return false
 	}
 	return !s.Authenticated
+}
+
+func (s *Session) authenticate(method string, payload string) Response {
+	switch {
+	case method != "PLAIN":
+		return Response{504, "Unrecognized authentication type"}
+	case payload == "":
+		return Response{334, ""}
+	default:
+		return s.checkCredentials(payload)
+	}
+}
+
+func (s *Session) checkCredentials(payload string) Response {
+	data, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return Response{501, "Error decoding credentials"}
+	}
+
+	valid, err := s.auth.ValidCredentials(string(data))
+	if err != nil {
+		return Response{501, "Error validating credentials"}
+	}
+
+	s.Authenticated = valid
+	if !valid {
+		return Response{535, "Authentication failed"}
+	} else {
+		return Response{235, "Authentication successful"}
+	}
 }
 
 // Advances the state of the session according to the parsed SMTP command, and
@@ -170,7 +234,7 @@ func (s *Session) Advance(node *parse.Node) Response {
 	case "helo":
 		return Response{250, "Hello"}
 	case "ehlo":
-		return Response{250, "Hello"}
+		return Response{250, "Hello\r\nAUTH PLAIN"}
 	case "noop":
 		return Response{250, "Noop"}
 	case "rcpt":
@@ -181,6 +245,16 @@ func (s *Session) Advance(node *parse.Node) Response {
 		return Response{252, "Maybe"}
 	case "data":
 		return Response{354, "Go"}
+	case "auth":
+		if s.Authenticated {
+			return Response{503, "Already authenticated"}
+		}
+		authType := node.Children["type"].Text
+		if payload, ok := node.Get("payload"); ok {
+			return s.authenticate(authType, payload.Text)
+		} else {
+			return s.authenticate(authType, "")
+		}
 	default:
 		return Response{502, "Not implemented"}
 	}

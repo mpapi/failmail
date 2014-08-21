@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -34,6 +35,7 @@ func main() {
 
 		relayUser     = flag.String("relay-user", "", "username for auth to relay server")
 		relayPassword = flag.String("relay-password", "", "password for auth to relay server")
+		credentials   = flag.String("auth", "", "username:password for authenticating to failmail")
 
 		relayCommand = flag.String("relay-command", "", "relay messages by running this command and passing the message to stdin")
 
@@ -70,9 +72,14 @@ func main() {
 	}()
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
+	auth, err := buildAuth(*credentials)
+	if err != nil {
+		log.Fatalf("failed to parse auth credentials: %s", err)
+	}
+
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr}
+	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr, Auth: auth}
 	go listener.Listen(received)
 
 	// Figure out how to batch messages into separate summary emails. By
@@ -204,4 +211,17 @@ func buildUpstream(relayAddr, relayUser, relayPassword, allDir, relayCommand str
 		upstream = NewMultiUpstream(&ExecUpstream{relayCommand}, upstream)
 	}
 	return upstream, nil
+}
+
+func buildAuth(credentials string) (Auth, error) {
+	if credentials == "" {
+		return nil, nil
+	}
+
+	parts := strings.SplitN(credentials, ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("credentials must be in username:password format")
+	}
+
+	return &SingleUserPlainAuth{Username: parts[0], Password: parts[1]}, nil
 }
