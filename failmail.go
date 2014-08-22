@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
@@ -36,6 +37,8 @@ func main() {
 		relayUser     = flag.String("relay-user", "", "username for auth to relay server")
 		relayPassword = flag.String("relay-password", "", "password for auth to relay server")
 		credentials   = flag.String("auth", "", "username:password for authenticating to failmail")
+		tlsCert       = flag.String("tls-cert", "", "PEM certificate file for TLS")
+		tlsKey        = flag.String("tls-key", "", "PEM key file for TLS")
 
 		relayCommand = flag.String("relay-command", "", "relay messages by running this command and passing the message to stdin")
 
@@ -77,9 +80,11 @@ func main() {
 		log.Fatalf("failed to parse auth credentials: %s", err)
 	}
 
+	tlsConfig, err := buildTLSConfig(*tlsCert, *tlsKey)
+
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr, Auth: auth}
+	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr, Auth: auth, TLSConfig: tlsConfig}
 	go listener.Listen(received)
 
 	// Figure out how to batch messages into separate summary emails. By
@@ -224,4 +229,16 @@ func buildAuth(credentials string) (Auth, error) {
 	}
 
 	return &SingleUserPlainAuth{Username: parts[0], Password: parts[1]}, nil
+}
+
+func buildTLSConfig(certFile string, keyFile string) (*tls.Config, error) {
+	if certFile == "" || keyFile == "" {
+		return nil, nil
+	}
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
 }

@@ -101,7 +101,7 @@ func TestListenerWithMessage(t *testing.T) {
 
 func TestListenerWithBadClient(t *testing.T) {
 	buf := new(bytes.Buffer)
-	l := &Listener{log.New(buf, "", log.LstdFlags), "", nil, 0, 0}
+	l := &Listener{log.New(buf, "", log.LstdFlags), "", nil, nil, 0, 0}
 	received := make(chan *ReceivedMessage, 1)
 	l.handleConnection(BadClient{}, received)
 	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {

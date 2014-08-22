@@ -60,7 +60,10 @@ func SMTPParser() func(string) *p.Node {
 	authWithPayload := Line(Command("AUTH"), space, p.Label("type", authType), space, p.Label("payload", base64Str))
 	auth := p.Longest(authWithPayload, authWithoutPayload)
 
-	smtp := p.Any(helo, mail, rcpt, data, rset, noop, quit, ehlo, vrfy, auth)
+	// RFC 3207
+	starttls := Line(Command("STARTTLS"))
+
+	smtp := p.Any(helo, mail, rcpt, data, rset, noop, quit, ehlo, vrfy, auth, starttls)
 
 	return func(str string) *p.Node {
 		_, node := smtp.Parse(str)

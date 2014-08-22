@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
@@ -15,6 +16,7 @@ type Listener struct {
 	*log.Logger
 	Addr      string // address to listen on, as host:port
 	Auth      Auth
+	TLSConfig *tls.Config
 	conns     int
 	connLimit int
 }
@@ -60,7 +62,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 	writer := bufio.NewWriter(conn)
 
 	session := new(Session)
-	session.Start(l.Auth).WriteTo(writer)
+	session.Start(l.Auth, l.TLSConfig != nil).WriteTo(writer)
 
 	for {
 		resp, err := session.ReadCommand(reader)
@@ -84,6 +86,16 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 		case resp.NeedsAuthResponse():
 			resp := session.ReadAuthResponse(reader)
 			resp.WriteTo(writer)
+		case resp.StartsTLS():
+			netConn, ok := conn.(net.Conn)
+			if !ok {
+				l.Printf("error getting underlying connection for STARTTLS")
+				return
+			}
+			tlsConn := tls.Server(netConn, l.TLSConfig)
+			reader.Reset(tlsConn)
+			writer.Reset(tlsConn)
+			defer tlsConn.Close()
 		}
 	}
 }

@@ -31,6 +31,10 @@ func (r Response) NeedsData() bool {
 	return r.Code == 354
 }
 
+func (r Response) StartsTLS() bool {
+	return r.Text == "Ready to switch to TLS"
+}
+
 // TODO return error
 func (r Response) WriteTo(writer *bufio.Writer) {
 	text := strings.TrimSpace(r.Text)
@@ -78,16 +82,18 @@ type Session struct {
 	hostname      string
 	parser        Parser
 	auth          Auth
+	hasTLS        bool
 }
 
 // Sets up a session and returns the `Response` that should be sent to a
 // client immediately after it connects.
-func (s *Session) Start(auth Auth) Response {
+func (s *Session) Start(auth Auth, hasTLS bool) Response {
 	s.initHostname()
 	s.parser = SMTPParser()
 	s.Received = &ReceivedMessage{}
 	s.Authenticated = auth == nil
 	s.auth = auth
+	s.hasTLS = hasTLS
 
 	return Response{220, fmt.Sprintf("%s Hi there", s.hostname)}
 }
@@ -234,7 +240,11 @@ func (s *Session) Advance(node *parse.Node) Response {
 	case "helo":
 		return Response{250, "Hello"}
 	case "ehlo":
-		return Response{250, "Hello\r\nAUTH PLAIN"}
+		text := "Hello\r\nAUTH PLAIN"
+		if s.hasTLS {
+			text += "\r\nSTARTTLS"
+		}
+		return Response{250, text}
 	case "noop":
 		return Response{250, "Noop"}
 	case "rcpt":
@@ -255,6 +265,8 @@ func (s *Session) Advance(node *parse.Node) Response {
 		} else {
 			return s.authenticate(authType, "")
 		}
+	case "starttls":
+		return Response{220, "Ready to switch to TLS"}
 	default:
 		return Response{502, "Not implemented"}
 	}
