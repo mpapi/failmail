@@ -105,12 +105,12 @@ func TestSummarize(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
 
-	summarized := Summarize(SameSubject(), "failmail@example.com", []*ReceivedMessage{msg1, msg2})
+	summarized := Summarize(SameSubject(), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
 
 	if summarized.From != "failmail@example.com" {
 		t.Errorf("unexpected from address from Summarize(): %s", summarized.From)
 	}
-	if !reflect.DeepEqual(summarized.To, []string{"test2@example.com", "test3@example.com"}) {
+	if !reflect.DeepEqual(summarized.To, []string{"test2@example.com"}) {
 		t.Errorf("unexpected to address from Summarize(): %#v", summarized.To)
 	}
 	if summarized.Subject != "[failmail] 2 messages" {
@@ -123,7 +123,7 @@ func TestMessageBuffer(t *testing.T) {
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
-	buf.Add(makeReceivedMessage(t, "Subject: test\r\n\r\ntest 1"))
+	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
 	if count := len(buf.messages); count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
@@ -136,7 +136,7 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650005, 0))
-	buf.Add(makeReceivedMessage(t, "Subject: test\r\n\r\ntest 2"))
+	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 2"))
 	if count := len(buf.messages); count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
@@ -188,7 +188,7 @@ func TestFlushForce(t *testing.T) {
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
-	buf.Add(makeReceivedMessage(t, "Subject: test\r\n\r\ntest 1"))
+	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
 	if count := len(buf.messages); count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}

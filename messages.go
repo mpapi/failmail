@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/mail"
 	"regexp"
-	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -178,23 +177,10 @@ func (s *SummaryMessage) Parts() *OutgoingParts {
 	return &OutgoingParts{s.From, s.To, s.Bytes(), s.Subject}
 }
 
-func Summarize(group GroupBy, from string, received []*ReceivedMessage) *SummaryMessage {
+func Summarize(group GroupBy, from string, to string, received []*ReceivedMessage) *SummaryMessage {
 	result := &SummaryMessage{}
 	result.From = from
-
-	recipSet := make(map[string]struct{})
-	recips := make([]string, 0)
-	for _, msg := range received {
-		for _, to := range msg.To {
-			if _, ok := recipSet[to]; !ok {
-				recipSet[to] = struct{}{}
-				recips = append(recips, to)
-			}
-		}
-	}
-	sort.Strings(recips)
-
-	result.To = recips
+	result.To = []string{to}
 	result.Subject = fmt.Sprintf("[failmail] %s", Plural(len(received), "message", "messages"))
 	result.Date = nowGetter()
 	result.ReceivedMessages = received
@@ -208,9 +194,9 @@ type MessageBuffer struct {
 	Batch        GroupBy // determines how messages are split into summary emails
 	Group        GroupBy // determines how messages are grouped within summary emails
 	From         string
-	first        map[string]time.Time
-	last         map[string]time.Time
-	messages     map[string][]*ReceivedMessage
+	first        map[RecipientKey]time.Time
+	last         map[RecipientKey]time.Time
+	messages     map[RecipientKey][]*ReceivedMessage
 	lastReceived time.Time
 }
 
@@ -221,14 +207,14 @@ func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch Gr
 		batch,
 		group,
 		from,
-		make(map[string]time.Time),
-		make(map[string]time.Time),
-		make(map[string][]*ReceivedMessage),
+		make(map[RecipientKey]time.Time),
+		make(map[RecipientKey]time.Time),
+		make(map[RecipientKey][]*ReceivedMessage),
 		time.Time{},
 	}
 }
 
-func (b *MessageBuffer) checkWithinLimits(now time.Time, key string) bool {
+func (b *MessageBuffer) checkWithinLimits(now time.Time, key RecipientKey) bool {
 	return now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit
 }
 
@@ -239,7 +225,7 @@ func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 		if !force && b.checkWithinLimits(now, key) {
 			continue
 		}
-		summaries = append(summaries, Summarize(b.Group, b.From, msgs))
+		summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, msgs))
 		delete(b.messages, key)
 		delete(b.first, key)
 		delete(b.last, key)
@@ -249,14 +235,17 @@ func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 
 func (b *MessageBuffer) Add(msg *ReceivedMessage) {
 	key := b.Batch(msg)
-	now := nowGetter()
-	if _, ok := b.first[key]; !ok {
-		b.first[key] = now
-		b.messages[key] = make([]*ReceivedMessage, 0)
+	for _, to := range msg.To {
+		recipKey := RecipientKey{key, to}
+		now := nowGetter()
+		if _, ok := b.first[recipKey]; !ok {
+			b.first[recipKey] = now
+			b.messages[recipKey] = make([]*ReceivedMessage, 0)
+		}
+		b.last[recipKey] = now
+		b.messages[recipKey] = append(b.messages[recipKey], msg)
+		b.lastReceived = now
 	}
-	b.last[key] = now
-	b.messages[key] = append(b.messages[key], msg)
-	b.lastReceived = now
 }
 
 func (b *MessageBuffer) Stats() *BufferStats {
@@ -268,6 +257,11 @@ func (b *MessageBuffer) Stats() *BufferStats {
 		}
 	}
 	return &BufferStats{len(b.messages), allMessages, b.lastReceived}
+}
+
+type RecipientKey struct {
+	Key       string
+	Recipient string
 }
 
 type BufferStats struct {
