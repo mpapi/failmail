@@ -216,10 +216,18 @@ func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	return summaries
 }
 
+func NormalizeAddress(email string) string {
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
+		return email
+	}
+	return strings.ToLower(addr.Address)
+}
+
 func (b *MessageBuffer) Add(msg *ReceivedMessage) {
 	key := b.Batch(msg)
 	for _, to := range msg.To {
-		recipKey := RecipientKey{key, to}
+		recipKey := RecipientKey{key, NormalizeAddress(to)}
 		now := nowGetter()
 		if _, ok := b.first[recipKey]; !ok {
 			b.first[recipKey] = now

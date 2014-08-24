@@ -301,3 +301,17 @@ func TestHeaderDefault(t *testing.T) {
 		t.Errorf("unexpected grouping: %s", key)
 	}
 }
+
+func TestNormalizeAddress(t *testing.T) {
+	if norm := NormalizeAddress("bad email address"); norm != "bad email address" {
+		t.Errorf("unexpected normalization of invalid address: %s", norm)
+	}
+
+	if norm := NormalizeAddress("<TEST@example.com>"); norm != "test@example.com" {
+		t.Errorf("unexpected normalization of address: %s", norm)
+	}
+
+	if norm := NormalizeAddress("Test User <test@example.com>"); norm != "test@example.com" {
+		t.Errorf("unexpected normalization of address: %s", norm)
+	}
+}
