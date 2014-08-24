@@ -34,23 +34,6 @@ type ReceivedMessage struct {
 	bodyCached []byte
 }
 
-/*// The message key is used to determine whether a message is an instance of a*/
-/*// group of similar messages. This method returns either:*/
-/*//*/
-/*// - the value of the X-Failmail-Key header, or*/
-/*// - the result of replacing characters in the message subject that match the*/
-/*//   regular expression `pattern`*/
-/*func (r *ReceivedMessage) Key(pattern *regexp.Regexp) string {*/
-/*    var key string*/
-/*    if keyHeader, ok := r.Message.Header["X-Failmail-Key"]; ok {*/
-/*        key = keyHeader[0]*/
-/*    } else {*/
-/*        key = pattern.ReplaceAllString(r.Message.Header.Get("Subject"), "#")*/
-/*    }*/
-/*    sort.Strings(r.To)*/
-/*    return fmt.Sprintf("%s;%s", strings.Join(r.To, ","), key)*/
-/*}*/
-
 // Returns the body of the message.
 func (r *ReceivedMessage) Body() string {
 	if r.bodyCached != nil {
