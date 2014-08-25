@@ -8,9 +8,12 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var normalizeFlagPattern = regexp.MustCompile("([a-z])([A-Z])")
 
 func ConfigParser() p.Parser {
 	comment := p.Omit(p.Regexp(`\s*#.*\n`))
@@ -52,7 +55,7 @@ func walk(parsed *p.Node) map[string]string {
 	for item := parsed.Next; item != nil; item = item.Next {
 		if key, ok := item.Get("key"); ok && key.Text != "" {
 			if value, ok := item.Get("value"); ok {
-				settings[strings.ToLower(key.Text)] = value.Text
+				settings[normalizeFlag(key.Text)] = value.Text
 			}
 		}
 	}
@@ -81,10 +84,15 @@ func fields(structPointer interface{}) []*field {
 
 func bind(settings map[string]string, config interface{}) {
 	for _, f := range fields(config) {
-		if value, ok := settings[strings.ToLower(f.Definition.Name)]; ok {
+		if value, ok := settings[normalizeFlag(f.Definition.Name)]; ok {
 			f.Value.Set(reflect.ValueOf(value))
 		}
 	}
+}
+
+func normalizeFlag(field string) string {
+	field = strings.Replace(field, "_", "-", -1)
+	return strings.ToLower(normalizeFlagPattern.ReplaceAllString(field, "$1-$2"))
 }
 
 func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandling) (*flag.FlagSet, map[string]reflect.Value, *string) {
@@ -92,7 +100,7 @@ func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandli
 
 	values := make(map[string]reflect.Value, 0)
 	for _, f := range fields(configWithDefaults) {
-		flagName := strings.ToLower(f.Definition.Name)
+		flagName := normalizeFlag(f.Definition.Name)
 		flagHelp := string(f.Definition.Tag)
 		values[flagName] = f.Value
 

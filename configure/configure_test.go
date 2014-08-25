@@ -35,3 +35,21 @@ func TestConfigParser(t *testing.T) {
 		t.Errorf("expected second result value = false, got %s", value)
 	}
 }
+
+func TestNormalizeFlag(t *testing.T) {
+	if result := normalizeFlag("Test"); result != "test" {
+		t.Errorf("expected 'test-flag', got %#v", result)
+	}
+
+	if result := normalizeFlag("TestFlag"); result != "test-flag" {
+		t.Errorf("expected 'test-flag', got %#v", result)
+	}
+
+	if result := normalizeFlag("TestHTTP"); result != "test-http" {
+		t.Errorf("expected 'test-flag', got %#v", result)
+	}
+
+	if result := normalizeFlag("test_HTTP"); result != "test-http" {
+		t.Errorf("expected 'test-flag', got %#v", result)
+	}
+}
