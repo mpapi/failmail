@@ -2,8 +2,8 @@ package main
 
 import (
 	"crypto/tls"
-	"flag"
 	"fmt"
+	"github.com/hut8labs/failmail/configure"
 	"log"
 	"os"
 	"os/signal"
@@ -14,45 +14,61 @@ import (
 
 const VERSION = "0.1.0"
 
-func main() {
-	var (
-		bindAddr     = flag.String("bind", "localhost:2525", "local bind address")
-		relayAddr    = flag.String("relay", "localhost:25", "relay server address")
-		waitPeriod   = flag.Duration("wait", 30*time.Second, "wait this long for more batchable messages")
-		maxWait      = flag.Duration("max-wait", 5*time.Minute, "wait at most this long from first message to send summary")
-		from         = flag.String("from", DefaultFromAddress("failmail"), "from address")
-		failDir      = flag.String("fail-dir", "failed", "write failed sends to this maildir")
-		allDir       = flag.String("all-dir", "", "write all sends to this maildir")
-		rateLimit    = flag.Int("rate-limit", 0, "alert if this many emails are received within a window")
-		rateCheck    = flag.Duration("rate-check", 1*time.Minute, "how often to check whether rate limit was exceeded")
-		rateWindow   = flag.Int("rate-window", 5, "the size of the rate limit window, in check intervals")
-		batchHeader  = flag.String("batch-header", "X-Failmail-Split", "the name of the header to use to separate messages into summary mails")
-		batchReplace = flag.String("batch-subject-replace", "", "batch messages into summaries whose subjects are the same after stripping out characters that match this regexp")
-		batchMatch   = flag.String("batch-subject-match", "", "batch messages into summaries whose subjects are the same after using only the characters that match this regexp")
-		groupReplace = flag.String("group-subject-replace", "", "group messages within summaries whose subjects are the same after stripping out characters that match this regexp")
-		groupMatch   = flag.String("group-subject-match", "", "group messages within summaries whose subjects are the same after using only the characters that match this regexp")
-		bindHTTP     = flag.String("bind-http", "localhost:8025", "local bind address for the HTTP server")
-		relayAll     = flag.Bool("relay-all", false, "relay all messages to the upstream server")
+type Config struct {
+	BindAddr     string        `help:"local bind address"`
+	RelayAddr    string        `help:"relay server address"`
+	WaitPeriod   time.Duration `help:"wait this long for more batchable messages"`
+	MaxWait      time.Duration `help:"wait at most this long from first message to send summary"`
+	From         string        `help:"from address"`
+	FailDir      string        `help:"write failed sends to this maildir"`
+	AllDir       string        `help:"write all sends to this maildir"`
+	RateLimit    int           `help:"alert if this many emails are received within a window"`
+	RateCheck    time.Duration `help:"how often to check whether rate limit was exceeded"`
+	RateWindow   int           `help:"the size of the rate limit window, in check intervals"`
+	BatchHeader  string        `help:"the name of the header to use to separate messages into summary mails"`
+	BatchReplace string        `help:"batch messages into summaries whose subjects are the same after stripping out characters that match this regexp"`
+	BatchMatch   string        `help:"batch messages into summaries whose subjects are the same after using only the characters that match this regexp"`
+	GroupReplace string        `help:"group messages within summaries whose subjects are the same after stripping out characters that match this regexp"`
+	GroupMatch   string        `help:"group messages within summaries whose subjects are the same after using only the characters that match this regexp"`
+	BindHTTP     string        `help:"local bind address for the HTTP server"`
+	RelayAll     bool          `help:"relay all messages to the upstream server"`
 
-		relayUser     = flag.String("relay-user", "", "username for auth to relay server")
-		relayPassword = flag.String("relay-password", "", "password for auth to relay server")
-		credentials   = flag.String("auth", "", "username:password for authenticating to failmail")
-		tlsCert       = flag.String("tls-cert", "", "PEM certificate file for TLS")
-		tlsKey        = flag.String("tls-key", "", "PEM key file for TLS")
+	RelayUser     string `help:"username for auth to relay server"`
+	RelayPassword string `help:"password for auth to relay server"`
+	Credentials   string `help:"username:password for authenticating to failmail"`
+	TlsCert       string `help:"PEM certificate file for TLS"`
+	TlsKey        string `help:"PEM key file for TLS"`
 
-		relayCommand = flag.String("relay-command", "", "relay messages by running this command and passing the message to stdin")
+	RelayCommand string `help:"relay messages by running this command and passing the message to stdin"`
 
-		script = flag.String("script", "", "SMTP session script to run")
+	Script  string `help:"SMTP session script to run"`
+	Version bool   `help:"show the version number and exit"`
+}
 
-		version = flag.Bool("version", false, "show the version number and exit")
-	)
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Failmail %s\n\nUsage of %s:\n", VERSION, os.Args[0])
-		flag.PrintDefaults()
+func Defaults() *Config {
+	return &Config{
+		BindAddr:    "localhost:2525",
+		RelayAddr:   "localhost:25",
+		WaitPeriod:  30 * time.Second,
+		MaxWait:     5 * time.Minute,
+		From:        DefaultFromAddress("failmail"),
+		FailDir:     "failed",
+		RateCheck:   1 * time.Minute,
+		RateWindow:  5,
+		BatchHeader: "X-Failmail-Split",
+		BindHTTP:    "localhost:8025",
 	}
-	flag.Parse()
+}
 
-	if *version {
+func main() {
+	config := Defaults()
+
+	err := configure.Parse(config, fmt.Sprintf("failmail %s", VERSION))
+	if err != nil {
+		log.Fatalf("Failed to read configuration: %s", err)
+	}
+
+	if config.Version {
 		fmt.Fprintf(os.Stderr, "Failmail %s\n", VERSION)
 		return
 	}
@@ -75,59 +91,59 @@ func main() {
 	}()
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-	auth, err := buildAuth(*credentials)
+	auth, err := buildAuth(config.Credentials)
 	if err != nil {
 		log.Fatalf("failed to parse auth credentials: %s", err)
 	}
 
-	tlsConfig, err := buildTLSConfig(*tlsCert, *tlsKey)
+	tlsConfig, err := buildTLSConfig(config.TlsCert, config.TlsKey)
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	listener := &Listener{Logger: logger("listener"), Addr: *bindAddr, Auth: auth, TLSConfig: tlsConfig}
+	listener := &Listener{Logger: logger("listener"), Addr: config.BindAddr, Auth: auth, TLSConfig: tlsConfig}
 	go listener.Listen(received)
 
 	// Figure out how to batch messages into separate summary emails. By
 	// default, use the value of the --batch-header argument (falling back to
 	// empty string, meaning all messages end up in the same summary email).
-	batch := buildBatch(*batchMatch, *batchReplace, *batchHeader)
+	batch := buildBatch(config.BatchMatch, config.BatchReplace, config.BatchHeader)
 
 	// Figure out how to group like messages within a summary. By default,
 	// those with the same subject are considered the same.
-	group := buildGroup(*groupMatch, *groupReplace)
+	group := buildGroup(config.GroupMatch, config.GroupReplace)
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
-	buffer := NewMessageBuffer(*waitPeriod, *maxWait, batch, group, *from)
+	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, batch, group, config.From)
 
 	// A `RateCounter` watches the rate at which incoming messages are arriving
 	// and can determine whether we've exceeded some threshold, for alerting.
-	rateCounter := NewRateCounter(*rateLimit, *rateWindow)
+	rateCounter := NewRateCounter(config.RateLimit, config.RateWindow)
 
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.
-	upstream, err := buildUpstream(*relayAddr, *relayUser, *relayPassword, *allDir, *relayCommand)
+	upstream, err := buildUpstream(config.RelayAddr, config.RelayUser, config.RelayPassword, config.AllDir, config.RelayCommand)
 	if err != nil {
 		log.Fatalf("failed to create upstream: %s", err)
 	}
 
 	// Any messages we were unable to send upstream will be written to this
 	// maildir.
-	failedMaildir := &Maildir{Path: *failDir}
+	failedMaildir := &Maildir{Path: config.FailDir}
 	if err := failedMaildir.Create(); err != nil {
-		log.Fatalf("failed to create maildir for failed messages at %s: %s", *failDir, err)
+		log.Fatalf("failed to create maildir for failed messages at %s: %s", config.FailDir, err)
 	}
 
-	if *script != "" {
-		runner, err := runScript(*script)
+	if config.Script != "" {
+		runner, err := runScript(config.Script)
 		if err != nil {
-			log.Fatalf("failed to run script file %s: %s", *script, err)
+			log.Fatalf("failed to run script file %s: %s", config.Script, err)
 		}
 		go runner(done)
 	}
 
-	go ListenHTTP(*bindHTTP, buffer)
-	go run(buffer, rateCounter, *rateCheck, received, sending, done, *relayAll)
+	go ListenHTTP(config.BindHTTP, buffer)
+	go run(buffer, rateCounter, config.RateCheck, received, sending, done, config.RelayAll)
 	sendUpstream(sending, upstream, failedMaildir)
 }
 
