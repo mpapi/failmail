@@ -101,7 +101,7 @@ func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandli
 	values := make(map[string]reflect.Value, 0)
 	for _, f := range fields(configWithDefaults) {
 		flagName := normalizeFlag(f.Definition.Name)
-		flagHelp := string(f.Definition.Tag)
+		flagHelp := string(f.Definition.Tag.Get("help"))
 		values[flagName] = f.Value
 
 		switch {
