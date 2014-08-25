@@ -123,7 +123,7 @@ func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandli
 	return flagset, values, configFile
 }
 
-func Parse(configWithDefaults interface{}) error {
+func Parse(configWithDefaults interface{}, name string) error {
 	flagset, _, configFile := buildFlagSet(configWithDefaults, flag.ContinueOnError)
 	flagset.Usage = func() {}
 
@@ -142,6 +142,10 @@ func Parse(configWithDefaults interface{}) error {
 	}
 
 	flagset2, fieldValues, _ := buildFlagSet(configWithDefaults, flag.ExitOnError)
+	flagset2.Usage = func() {
+		fmt.Fprintf(os.Stderr, "%s\n\nUsage of %s:\n", name, os.Args[0])
+		flagset.PrintDefaults()
+	}
 
 	err = flagset2.Parse(os.Args[1:])
 	if err != nil {
