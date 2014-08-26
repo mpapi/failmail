@@ -60,6 +60,71 @@ func Defaults() *Config {
 	}
 }
 
+func (c *Config) Auth() (Auth, error) {
+	if c.Credentials == "" {
+		return nil, nil
+	}
+
+	parts := strings.SplitN(c.Credentials, ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("credentials must be in username:password format")
+	}
+
+	return &SingleUserPlainAuth{Username: parts[0], Password: parts[1]}, nil
+}
+
+func (c *Config) Batch() GroupBy {
+	if c.BatchMatch != "" {
+		return MatchingSubject(c.BatchMatch)
+	} else if c.BatchReplace != "" {
+		return ReplacedSubject(c.BatchReplace, "*")
+	}
+	return Header(c.BatchHeader, "")
+}
+
+func (c *Config) Group() GroupBy {
+	if c.GroupMatch != "" {
+		return MatchingSubject(c.GroupMatch)
+	} else if c.GroupReplace != "" {
+		return ReplacedSubject(c.GroupReplace, "*")
+	}
+	return SameSubject()
+}
+
+func (c *Config) Upstream() (Upstream, error) {
+	var upstream Upstream
+	if c.RelayAddr == "debug" {
+		upstream = &DebugUpstream{os.Stdout}
+	} else {
+		upstream = &LiveUpstream{logger("upstream"), c.RelayAddr, c.RelayUser, c.RelayPassword}
+	}
+
+	if c.AllDir != "" {
+		allMaildir := &Maildir{Path: c.AllDir}
+		if err := allMaildir.Create(); err != nil {
+			return upstream, err
+		}
+		upstream = NewMultiUpstream(&MaildirUpstream{allMaildir}, upstream)
+	}
+
+	if c.RelayCommand != "" {
+		upstream = NewMultiUpstream(&ExecUpstream{c.RelayCommand}, upstream)
+	}
+	return upstream, nil
+}
+
+func (c *Config) TLSConfig() (*tls.Config, error) {
+	if c.TlsCert == "" || c.TlsKey == "" {
+		return nil, nil
+	}
+
+	cert, err := tls.LoadX509KeyPair(c.TlsCert, c.TlsKey)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
+}
+
 func main() {
 	config := Defaults()
 
@@ -91,12 +156,12 @@ func main() {
 	}()
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-	auth, err := buildAuth(config.Credentials)
+	auth, err := config.Auth()
 	if err != nil {
 		log.Fatalf("failed to parse auth credentials: %s", err)
 	}
 
-	tlsConfig, err := buildTLSConfig(config.TlsCert, config.TlsKey)
+	tlsConfig, err := config.TLSConfig()
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
@@ -106,11 +171,11 @@ func main() {
 	// Figure out how to batch messages into separate summary emails. By
 	// default, use the value of the --batch-header argument (falling back to
 	// empty string, meaning all messages end up in the same summary email).
-	batch := buildBatch(config.BatchMatch, config.BatchReplace, config.BatchHeader)
+	batch := config.Batch()
 
 	// Figure out how to group like messages within a summary. By default,
 	// those with the same subject are considered the same.
-	group := buildGroup(config.GroupMatch, config.GroupReplace)
+	group := config.Group()
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
@@ -122,7 +187,7 @@ func main() {
 
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.
-	upstream, err := buildUpstream(config.RelayAddr, config.RelayUser, config.RelayPassword, config.AllDir, config.RelayCommand)
+	upstream, err := config.Upstream()
 	if err != nil {
 		log.Fatalf("failed to create upstream: %s", err)
 	}
@@ -192,69 +257,4 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 			break
 		}
 	}
-}
-
-func buildBatch(batchMatch, batchReplace, batchHeader string) GroupBy {
-	if batchMatch != "" {
-		return MatchingSubject(batchMatch)
-	} else if batchReplace != "" {
-		return ReplacedSubject(batchReplace, "*")
-	}
-	return Header(batchHeader, "")
-}
-
-func buildGroup(groupMatch, groupReplace string) GroupBy {
-	if groupMatch != "" {
-		return MatchingSubject(groupMatch)
-	} else if groupReplace != "" {
-		return ReplacedSubject(groupReplace, "*")
-	}
-	return SameSubject()
-}
-
-func buildUpstream(relayAddr, relayUser, relayPassword, allDir, relayCommand string) (Upstream, error) {
-	var upstream Upstream
-	if relayAddr == "debug" {
-		upstream = &DebugUpstream{os.Stdout}
-	} else {
-		upstream = &LiveUpstream{logger("upstream"), relayAddr, relayUser, relayPassword}
-	}
-
-	if allDir != "" {
-		allMaildir := &Maildir{Path: allDir}
-		if err := allMaildir.Create(); err != nil {
-			return upstream, err
-		}
-		upstream = NewMultiUpstream(&MaildirUpstream{allMaildir}, upstream)
-	}
-
-	if relayCommand != "" {
-		upstream = NewMultiUpstream(&ExecUpstream{relayCommand}, upstream)
-	}
-	return upstream, nil
-}
-
-func buildAuth(credentials string) (Auth, error) {
-	if credentials == "" {
-		return nil, nil
-	}
-
-	parts := strings.SplitN(credentials, ":", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("credentials must be in username:password format")
-	}
-
-	return &SingleUserPlainAuth{Username: parts[0], Password: parts[1]}, nil
-}
-
-func buildTLSConfig(certFile string, keyFile string) (*tls.Config, error) {
-	if certFile == "" || keyFile == "" {
-		return nil, nil
-	}
-
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
 }
