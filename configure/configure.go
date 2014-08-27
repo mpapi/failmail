@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -46,7 +47,7 @@ func ReadConfig(reader io.Reader, config interface{}) (err error) {
 	}()
 
 	settings := walk(parsed)
-	bind(settings, config)
+	err = bind(settings, config)
 	return
 }
 
@@ -55,7 +56,7 @@ func walk(parsed *p.Node) map[string]string {
 	for item := parsed.Next; item != nil; item = item.Next {
 		if key, ok := item.Get("key"); ok && key.Text != "" {
 			if value, ok := item.Get("value"); ok {
-				settings[normalizeFlag(key.Text)] = value.Text
+				settings[normalizeFlag(key.Text)] = strings.TrimSpace(value.Text)
 			}
 		}
 	}
@@ -82,12 +83,50 @@ func fields(structPointer interface{}) []*field {
 	return result
 }
 
-func bind(settings map[string]string, config interface{}) {
+func parseConfigValue(fieldType reflect.Type, value string) (reflect.Value, error) {
+	switch {
+	case reflect.TypeOf("").AssignableTo(fieldType):
+		return reflect.ValueOf(value), nil
+	case reflect.TypeOf(false).AssignableTo(fieldType):
+		if boolValue, err := strconv.ParseBool(value); err != nil {
+			return reflect.ValueOf(false), err
+		} else {
+			return reflect.ValueOf(boolValue), nil
+		}
+	case reflect.TypeOf(0.0).AssignableTo(fieldType):
+		if floatValue, err := strconv.ParseFloat(value, 64); err != nil {
+			return reflect.ValueOf(0.0), err
+		} else {
+			return reflect.ValueOf(floatValue), nil
+		}
+	case reflect.TypeOf(0).AssignableTo(fieldType):
+		if intValue, err := strconv.ParseInt(value, 10, 64); err != nil {
+			return reflect.ValueOf(0), err
+		} else {
+			return reflect.ValueOf(int(intValue)), nil
+		}
+	case reflect.TypeOf(time.Duration(0)).AssignableTo(fieldType):
+		if durationValue, err := time.ParseDuration(value); err != nil {
+			return reflect.ValueOf(time.Duration(0)), err
+		} else {
+			return reflect.ValueOf(durationValue), nil
+		}
+	default:
+		return reflect.ValueOf(""), fmt.Errorf("no parser for type %s", fieldType)
+	}
+}
+
+func bind(settings map[string]string, config interface{}) error {
 	for _, f := range fields(config) {
-		if value, ok := settings[normalizeFlag(f.Definition.Name)]; ok {
-			f.Value.Set(reflect.ValueOf(value))
+		if value, ok := settings[normalizeFlag(f.Definition.Name)]; ok && value != "" {
+			if parsed, err := parseConfigValue(f.Definition.Type, value); err != nil {
+				return err
+			} else {
+				f.Value.Set(parsed)
+			}
 		}
 	}
+	return nil
 }
 
 func normalizeFlag(field string) string {
