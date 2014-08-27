@@ -178,11 +178,11 @@ func Regexp(re string) *parseRegexp {
 }
 
 func (p *parseRegexp) Parse(str string) (string, *Node) {
-	match := p.Regexp.FindString(str)
+	match := p.Regexp.FindStringSubmatch(str)
 	if len(match) == 0 {
 		return str, nil
 	}
-	return str[len(match):], &Node{match, nil, nil}
+	return str[len(match[0]):], &Node{match[0], nil, nil}
 }
 
 func Repeat(times int, p Parser) Parser {
