@@ -16,11 +16,11 @@ import (
 var normalizeFlagPattern = regexp.MustCompile("([a-z])([A-Z])")
 
 func ConfigParser() p.Parser {
-	comment := p.Omit(p.Regexp(`\s*#.*\n`))
-	blank := p.Omit(p.Regexp(`\s*\n`))
+	comment := p.Omit(p.Regexp(`[ \t]*#.*\n`))
+	blank := p.Omit(p.Regexp(`[ \t]*\n`))
 	line := p.Series(
 		p.Label("key", p.Regexp(`\w+`)),
-		p.Regexp(`\s*=\s*`),
+		p.Regexp(`[ \t]*=[ \t]*`),
 		p.Label("value", p.Regexp(`[^\n]*`)),
 		p.Literal("\n"))
 	return p.ZeroOrMore(p.Any(comment, blank, line))
