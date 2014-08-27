@@ -134,7 +134,7 @@ func normalizeFlag(field string) string {
 	return strings.ToLower(normalizeFlagPattern.ReplaceAllString(field, "$1-$2"))
 }
 
-func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandling) (*flag.FlagSet, map[string]reflect.Value, *string) {
+func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandling) (*flag.FlagSet, map[string]reflect.Value, *string, *string) {
 	flagset := flag.NewFlagSet(os.Args[0], errorHandling)
 
 	values := make(map[string]reflect.Value, 0)
@@ -158,12 +158,13 @@ func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandli
 	}
 
 	configFile := flagset.String("config", "", "path to a config file")
+	writeConfig := flagset.String("write-config", "", "path to output a config file")
 
-	return flagset, values, configFile
+	return flagset, values, configFile, writeConfig
 }
 
 func Parse(configWithDefaults interface{}, name string) error {
-	flagset, _, configFile := buildFlagSet(configWithDefaults, flag.ContinueOnError)
+	flagset, _, configFile, _ := buildFlagSet(configWithDefaults, flag.ContinueOnError)
 	flagset.Usage = func() {}
 
 	err := flagset.Parse(os.Args[1:])
@@ -173,6 +174,7 @@ func Parse(configWithDefaults interface{}, name string) error {
 		if err != nil {
 			return err
 		}
+		defer file.Close()
 
 		err = ReadConfig(file, configWithDefaults)
 		if err != nil {
@@ -180,7 +182,7 @@ func Parse(configWithDefaults interface{}, name string) error {
 		}
 	}
 
-	flagset2, fieldValues, _ := buildFlagSet(configWithDefaults, flag.ExitOnError)
+	flagset2, fieldValues, _, writeConfig := buildFlagSet(configWithDefaults, flag.ExitOnError)
 	flagset2.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s\n\nUsage of %s:\n", name, os.Args[0])
 		flagset.PrintDefaults()
@@ -196,5 +198,28 @@ func Parse(configWithDefaults interface{}, name string) error {
 		}
 	})
 
+	if *writeConfig != "" {
+		file, err := os.Create(*writeConfig)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		err = Write(file, configWithDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func Write(writer io.Writer, config interface{}) error {
+	for _, f := range fields(config) {
+		name := strings.Replace(normalizeFlag(f.Definition.Name), "-", "_", -1)
+		if _, err := fmt.Fprintf(writer, "%s = %v\n", name, f.Value.Interface()); err != nil {
+			return err
+		}
+	}
 	return nil
 }
