@@ -1,6 +1,7 @@
 package configure
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -51,5 +52,30 @@ func TestNormalizeFlag(t *testing.T) {
 
 	if result := normalizeFlag("test_HTTP"); result != "test-http" {
 		t.Errorf("expected 'test-flag', got %#v", result)
+	}
+}
+
+type ReadConfigTest struct {
+	First  int
+	Second string
+	Third  bool
+}
+
+func TestReadConfig(t *testing.T) {
+	buffer := bytes.NewBufferString("# A comment\n\nfirst = 1\nsecond = 2\nthird = true\n")
+	config := &ReadConfigTest{}
+	err := ReadConfig(buffer, config)
+	if err != nil {
+		t.Fatalf("unexpected error reading config")
+	}
+
+	if config.First != 1 {
+		t.Errorf("Expected First = 1, got %d", config.First)
+	}
+	if config.Second != "2" {
+		t.Errorf("Expected Second = \"2\", got %s", config.Second)
+	}
+	if !config.Third {
+		t.Errorf("Expected Third = true, got %v", config.Third)
 	}
 }
