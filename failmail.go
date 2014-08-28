@@ -128,9 +128,11 @@ func (c *Config) TLSConfig() (*tls.Config, error) {
 func main() {
 	config := Defaults()
 
-	err := configure.Parse(config, fmt.Sprintf("failmail %s", VERSION))
+	wroteConfig, err := configure.Parse(config, fmt.Sprintf("failmail %s", VERSION))
 	if err != nil {
 		log.Fatalf("Failed to read configuration: %s", err)
+	} else if wroteConfig {
+		return
 	}
 
 	if config.Version {

@@ -163,7 +163,7 @@ func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandli
 	return flagset, values, configFile, writeConfig
 }
 
-func Parse(configWithDefaults interface{}, name string) error {
+func Parse(configWithDefaults interface{}, name string) (bool, error) {
 	flagset, _, configFile, _ := buildFlagSet(configWithDefaults, flag.ContinueOnError)
 	flagset.Usage = func() {}
 
@@ -172,13 +172,13 @@ func Parse(configWithDefaults interface{}, name string) error {
 	if *configFile != "" {
 		file, err := os.Open(*configFile)
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer file.Close()
 
 		err = ReadConfig(file, configWithDefaults)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -190,7 +190,7 @@ func Parse(configWithDefaults interface{}, name string) error {
 
 	err = flagset2.Parse(os.Args[1:])
 	if err != nil {
-		return err
+		return false, err
 	}
 	flagset2.VisitAll(func(f *flag.Flag) {
 		if fieldValue, ok := fieldValues[f.Name]; ok {
@@ -201,17 +201,17 @@ func Parse(configWithDefaults interface{}, name string) error {
 	if *writeConfig != "" {
 		file, err := os.Create(*writeConfig)
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer file.Close()
 
 		err = Write(file, configWithDefaults)
 		if err != nil {
-			return err
+			return false, err
 		}
+		return true, nil
 	}
-
-	return nil
+	return false, nil
 }
 
 func Write(writer io.Writer, config interface{}) error {
