@@ -32,6 +32,7 @@ type Config struct {
 	GroupMatch   string        `help:"group messages within summaries whose subjects are the same after using only the characters that match this regexp"`
 	BindHTTP     string        `help:"local bind address for the HTTP server"`
 	RelayAll     bool          `help:"relay all messages to the upstream server"`
+	Pidfile      string        `help:"write a pidfile to this path"`
 
 	RelayUser     string `help:"username for auth to relay server"`
 	RelayPassword string `help:"password for auth to relay server"`
@@ -179,6 +180,11 @@ func main() {
 	// those with the same subject are considered the same.
 	group := config.Group()
 
+	if config.Pidfile != "" {
+		cleanupFunc := writePidfile(config.Pidfile)
+		defer cleanupFunc()
+	}
+
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
 	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, batch, group, config.From)
@@ -258,5 +264,24 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 			close(sending)
 			break
 		}
+	}
+}
+
+func writePidfile(pidfile string) func() {
+	if _, err := os.Stat(pidfile); !os.IsNotExist(err) {
+		log.Fatalf("could not write pidfile %s: %s", pidfile, err)
+	} else if err == nil {
+		log.Fatalf("pidfile %s already exists", pidfile)
+	}
+
+	if file, err := os.Create(pidfile); err == nil {
+		fmt.Fprintf(file, "%d\n", os.Getpid())
+		defer file.Close()
+	} else {
+		log.Fatalf("could not write pidfile %s: %s", pidfile, err)
+	}
+
+	return func() {
+		os.Remove(pidfile)
 	}
 }
