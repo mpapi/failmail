@@ -14,6 +14,17 @@ import (
 
 const VERSION = "0.1.0"
 
+const LOGO = `
+     *===================*
+    / .-----------------. \
+   /  |                 |  \
+  +\~~|       :(        |~~/+
+  | \_._________________._/ |
+  |  /                   \  |
+  | /   failmail v%5s   \ |
+  |/_______________________\|
+`
+
 type Config struct {
 	BindAddr     string        `help:"local bind address"`
 	RelayAddr    string        `help:"relay server address"`
@@ -129,7 +140,7 @@ func (c *Config) TLSConfig() (*tls.Config, error) {
 func main() {
 	config := Defaults()
 
-	wroteConfig, err := configure.Parse(config, fmt.Sprintf("failmail %s", VERSION))
+	wroteConfig, err := configure.Parse(config, fmt.Sprintf(LOGO, VERSION))
 	if err != nil {
 		log.Fatalf("Failed to read configuration: %s", err)
 	} else if wroteConfig {
@@ -137,7 +148,7 @@ func main() {
 	}
 
 	if config.Version {
-		fmt.Fprintf(os.Stderr, "Failmail %s\n", VERSION)
+		fmt.Fprintf(os.Stderr, "failmail %s\n", VERSION)
 		return
 	}
 
