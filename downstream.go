@@ -5,27 +5,59 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
 )
 
 // Listener binds a socket on an address, and accepts email messages via SMTP
 // on each incoming connection.
 type Listener struct {
 	*log.Logger
-	Addr      string // address to listen on, as host:port
+	Creator   socketCreator
 	Auth      Auth
 	TLSConfig *tls.Config
 	conns     int
 	connLimit int
 }
 
+type socketCreator interface {
+	Listen() (net.Listener, error)
+	String() string
+}
+
+type tcpSocketCreator struct {
+	Addr string
+}
+
+func (t *tcpSocketCreator) Listen() (net.Listener, error) {
+	return net.Listen("tcp", t.Addr)
+}
+
+func (t *tcpSocketCreator) String() string {
+	return t.Addr
+}
+
+type fileSocketCreator struct {
+	Fd uintptr
+}
+
+func (f *fileSocketCreator) Listen() (net.Listener, error) {
+	file := os.NewFile(f.Fd, "socket")
+	return net.FileListener(file)
+}
+
+func (f *fileSocketCreator) String() string {
+	return fmt.Sprintf("fd %d", f.Fd)
+}
+
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
 func (l *Listener) Listen(received chan<- *ReceivedMessage) {
-	l.Printf("listening: %s", l.Addr)
-	ln, err := net.Listen("tcp", l.Addr)
+	l.Printf("listening: %s", l.Creator)
+	ln, err := l.Creator.Listen()
 	if err != nil {
 		l.Fatalf("error starting listener: %s", err)
 	}

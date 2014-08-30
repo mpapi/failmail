@@ -28,6 +28,7 @@ const LOGO = `
 type Config struct {
 	BindAddr     string        `help:"local bind address"`
 	RelayAddr    string        `help:"relay server address"`
+	SocketFd     int           `help:"file descriptor of socket to listen on"`
 	WaitPeriod   time.Duration `help:"wait this long for more batchable messages"`
 	MaxWait      time.Duration `help:"wait at most this long from first message to send summary"`
 	From         string        `help:"from address"`
@@ -137,6 +138,13 @@ func (c *Config) TLSConfig() (*tls.Config, error) {
 	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
 }
 
+func (c *Config) Creator() socketCreator {
+	if c.SocketFd > 0 {
+		return &fileSocketCreator{uintptr(c.SocketFd)}
+	}
+	return &tcpSocketCreator{c.BindAddr}
+}
+
 func main() {
 	config := Defaults()
 
@@ -179,7 +187,7 @@ func main() {
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	listener := &Listener{Logger: logger("listener"), Addr: config.BindAddr, Auth: auth, TLSConfig: tlsConfig}
+	listener := &Listener{Logger: logger("listener"), Creator: config.Creator(), Auth: auth, TLSConfig: tlsConfig}
 	go listener.Listen(received)
 
 	// Figure out how to batch messages into separate summary emails. By

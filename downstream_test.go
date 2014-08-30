@@ -27,7 +27,8 @@ func (b BadClient) Close() error {
 }
 
 func TestListener(t *testing.T) {
-	listener := &Listener{Logger: testLogger, Addr: "localhost:40025", connLimit: 1}
+	creator := &tcpSocketCreator{"localhost:40025"}
+	listener := &Listener{Logger: testLogger, Creator: creator, connLimit: 1}
 	received := make(chan *ReceivedMessage, 1)
 	done := make(chan bool, 0)
 
@@ -65,7 +66,8 @@ func TestListener(t *testing.T) {
 }
 
 func TestListenerWithMessage(t *testing.T) {
-	listener := &Listener{Logger: testLogger, Addr: "localhost:40026", connLimit: 1}
+	creator := &tcpSocketCreator{"localhost:40026"}
+	listener := &Listener{Logger: testLogger, Creator: creator, connLimit: 1}
 	received := make(chan *ReceivedMessage, 1)
 	done := make(chan bool, 0)
 
@@ -101,7 +103,8 @@ func TestListenerWithMessage(t *testing.T) {
 
 func TestListenerWithBadClient(t *testing.T) {
 	buf := new(bytes.Buffer)
-	l := &Listener{log.New(buf, "", log.LstdFlags), "", nil, nil, 0, 0}
+	creator := &tcpSocketCreator{"localhost:40027"}
+	l := &Listener{log.New(buf, "", log.LstdFlags), creator, nil, nil, 0, 0}
 	received := make(chan *ReceivedMessage, 1)
 	l.handleConnection(BadClient{}, received)
 	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {
