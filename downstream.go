@@ -10,63 +10,95 @@ import (
 	"log"
 	"net"
 	"os"
+	"reflect"
+	"syscall"
 )
 
 // Listener binds a socket on an address, and accepts email messages via SMTP
 // on each incoming connection.
 type Listener struct {
 	*log.Logger
-	Creator   socketCreator
+	Socket    ServerSocket
 	Auth      Auth
 	TLSConfig *tls.Config
 	conns     int
 	connLimit int
 }
 
-type socketCreator interface {
-	Listen() (net.Listener, error)
+type ServerSocket interface {
+	net.Listener
+	Fd() uintptr
 	String() string
 }
 
-type tcpSocketCreator struct {
-	Addr string
+type TCPServerSocket struct {
+	*net.TCPListener
+	addr string
 }
 
-func (t *tcpSocketCreator) Listen() (net.Listener, error) {
-	return net.Listen("tcp", t.Addr)
+func NewTCPServerSocket(addr string) (*TCPServerSocket, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	ln, err := net.ListenTCP("tcp", tcpAddr)
+	return &TCPServerSocket{ln, addr}, err
 }
 
-func (t *tcpSocketCreator) String() string {
-	return t.Addr
+func (t *TCPServerSocket) Fd() uintptr {
+	return uintptr(reflect.ValueOf(t.TCPListener).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
 }
 
-type fileSocketCreator struct {
-	Fd uintptr
+func (t *TCPServerSocket) String() string {
+	return t.addr
 }
 
-func (f *fileSocketCreator) Listen() (net.Listener, error) {
-	file := os.NewFile(f.Fd, "socket")
-	return net.FileListener(file)
+type FileServerSocket struct {
+	net.Listener
 }
 
-func (f *fileSocketCreator) String() string {
-	return fmt.Sprintf("fd %d", f.Fd)
+func NewFileServerSocket(fd uintptr) (*FileServerSocket, error) {
+	file := os.NewFile(fd, "socket")
+	ln, err := net.FileListener(file)
+	syscall.Close(int(fd))
+	return &FileServerSocket{ln}, err
+}
+
+func (f *FileServerSocket) Fd() uintptr {
+	t := f.Listener.(*net.TCPListener)
+	return uintptr(reflect.ValueOf(t).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
+}
+
+func (f *FileServerSocket) String() string {
+	return fmt.Sprintf("fd %d", f.Fd())
 }
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
-func (l *Listener) Listen(received chan<- *ReceivedMessage) {
-	l.Printf("listening: %s", l.Creator)
-	ln, err := l.Creator.Listen()
-	if err != nil {
-		l.Fatalf("error starting listener: %s", err)
-	}
+func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader) {
+	l.Printf("listening: %s", l.Socket)
+
+	go reloader.OnRequest(func() uintptr {
+		l.Printf("closing listening socket for reload")
+		l.Socket.Close()
+		if _, ok := l.Socket.(*FileServerSocket); ok {
+			fd := l.Socket.Fd()
+			newfd, _ := syscall.Dup(int(fd))
+			syscall.Close(int(fd))
+			return uintptr(newfd)
+		} else {
+			fd := l.Socket.Fd()
+			newfd, _ := syscall.Dup(int(fd))
+			return uintptr(newfd)
+		}
+	})
 
 	for {
-		conn, err := ln.Accept()
+		conn, err := l.Socket.Accept()
 		if err != nil {
 			l.Printf("error accepting connection: %s", err)
-			continue
+			break
 		}
 
 		l.conns += 1
@@ -80,6 +112,8 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage) {
 			break
 		}
 	}
+
+	l.Printf("done listening")
 }
 
 // handleConnection reads SMTP commands from a socket and writes back SMTP

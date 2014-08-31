@@ -138,11 +138,11 @@ func (c *Config) TLSConfig() (*tls.Config, error) {
 	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
 }
 
-func (c *Config) Creator() socketCreator {
+func (c *Config) Socket() (ServerSocket, error) {
 	if c.SocketFd > 0 {
-		return &fileSocketCreator{uintptr(c.SocketFd)}
+		return NewFileServerSocket(uintptr(c.SocketFd))
 	}
-	return &tcpSocketCreator{c.BindAddr}
+	return NewTCPServerSocket(c.BindAddr)
 }
 
 func main() {
@@ -159,6 +159,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failmail %s\n", VERSION)
 		return
 	}
+	log.Printf("failmail %s, starting up", VERSION)
 
 	// A channel for incoming messages. The listener sends on the channel, and
 	// receives are added to a MessageBuffer in the channel consumer below.
@@ -187,8 +188,16 @@ func main() {
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	listener := &Listener{Logger: logger("listener"), Creator: config.Creator(), Auth: auth, TLSConfig: tlsConfig}
-	go listener.Listen(received)
+	socket, err := config.Socket()
+	if err != nil {
+		log.Fatalf("failed to create socket for listener: %s", err)
+	}
+
+	reloader := NewReloader(done)
+	go reloader.HandleSignals()
+
+	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
+	go listener.Listen(received, reloader)
 
 	// Figure out how to batch messages into separate summary emails. By
 	// default, use the value of the --batch-header argument (falling back to
@@ -237,6 +246,8 @@ func main() {
 	go ListenHTTP(config.BindHTTP, buffer)
 	go run(buffer, rateCounter, config.RateCheck, received, sending, done, config.RelayAll)
 	sendUpstream(sending, upstream, failedMaildir)
+
+	reloader.ReloadIfNecessary()
 }
 
 func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
