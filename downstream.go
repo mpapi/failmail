@@ -82,16 +82,10 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader) 
 	go reloader.OnRequest(func() uintptr {
 		l.Printf("closing listening socket for reload")
 		l.Socket.Close()
-		if _, ok := l.Socket.(*FileServerSocket); ok {
-			fd := l.Socket.Fd()
-			newfd, _ := syscall.Dup(int(fd))
-			syscall.Close(int(fd))
-			return uintptr(newfd)
-		} else {
-			fd := l.Socket.Fd()
-			newfd, _ := syscall.Dup(int(fd))
-			return uintptr(newfd)
-		}
+		fd := l.Socket.Fd()
+		newfd, _ := syscall.Dup(int(fd))
+		syscall.CloseOnExec(newfd)
+		return uintptr(newfd)
 	})
 
 	for {
