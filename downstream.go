@@ -83,8 +83,17 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader) 
 		l.Printf("closing listening socket for reload")
 		l.Socket.Close()
 		fd := l.Socket.Fd()
+
+		// If we don't dup the fd, the `syscall.Close()` that ends up happening
+		// on it later will prevent us from being able to open it as a socket
+		// in the child process.
 		newfd, _ := syscall.Dup(int(fd))
+
+		// If we don't mark the new fd as CLOEXEC, the child process will
+		// inherit it twice (the second one being the one passed to
+		// ExtraFiles).
 		syscall.CloseOnExec(newfd)
+
 		return uintptr(newfd)
 	})
 
