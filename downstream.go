@@ -25,12 +25,15 @@ type Listener struct {
 	connLimit int
 }
 
+// ServerSocket is a `net.Listener` that can return its file descriptor.
 type ServerSocket interface {
 	net.Listener
 	Fd() uintptr
 	String() string
 }
 
+// TCPServerSocket is a ServerSocket implementation for listeners that bind a
+// TCP port from an address.
 type TCPServerSocket struct {
 	*net.TCPListener
 	addr string
@@ -47,13 +50,15 @@ func NewTCPServerSocket(addr string) (*TCPServerSocket, error) {
 }
 
 func (t *TCPServerSocket) Fd() uintptr {
-	return uintptr(reflect.ValueOf(t.TCPListener).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
+	return internalSocketFd(t.TCPListener)
 }
 
 func (t *TCPServerSocket) String() string {
 	return t.addr
 }
 
+// FileServerSocket is a ServerSocket implementation for listeners that open an
+// existing socket by its file descriptor.
 type FileServerSocket struct {
 	net.Listener
 }
@@ -66,12 +71,20 @@ func NewFileServerSocket(fd uintptr) (*FileServerSocket, error) {
 }
 
 func (f *FileServerSocket) Fd() uintptr {
-	t := f.Listener.(*net.TCPListener)
-	return uintptr(reflect.ValueOf(t).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
+	tcpListener := f.Listener.(*net.TCPListener)
+	return internalSocketFd(tcpListener)
 }
 
 func (f *FileServerSocket) String() string {
 	return fmt.Sprintf("fd %d", f.Fd())
+}
+
+func internalSocketFd(listener *net.TCPListener) uintptr {
+	// This is not particularly robust, but TCPListener doesn't expose the FD
+	// another way, and this implementation also serves as an assertion of
+	// layout of the underlying data structure (meaning, we want to panic
+	// rather than try to gracefully handle the error).
+	return uintptr(reflect.ValueOf(listener).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
 }
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
