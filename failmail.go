@@ -87,8 +87,8 @@ func main() {
 	group := config.Group()
 
 	if config.Pidfile != "" {
-		cleanupFunc := writePidfile(config.Pidfile)
-		defer cleanupFunc()
+		writePidfile(config.Pidfile)
+		defer os.Remove(config.Pidfile)
 	}
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
@@ -175,7 +175,7 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 	}
 }
 
-func writePidfile(pidfile string) func() {
+func writePidfile(pidfile string) {
 	if _, err := os.Stat(pidfile); !os.IsNotExist(err) {
 		log.Fatalf("could not write pidfile %s: %s", pidfile, err)
 	} else if err == nil {
@@ -187,9 +187,5 @@ func writePidfile(pidfile string) func() {
 		defer file.Close()
 	} else {
 		log.Fatalf("could not write pidfile %s: %s", pidfile, err)
-	}
-
-	return func() {
-		os.Remove(pidfile)
 	}
 }
