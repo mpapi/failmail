@@ -11,7 +11,9 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"sync"
 	"syscall"
+	"time"
 )
 
 // Listener binds a socket on an address, and accepts email messages via SMTP
@@ -87,12 +89,37 @@ func internalSocketFd(listener *net.TCPListener) uintptr {
 	return uintptr(reflect.ValueOf(listener).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
 }
 
+// Calls `Wait()` on a `sync.WaitGroup`, blocking for no more than the timeout.
+// Returns true if the call to `Wait()` returned before hitting the timeout, or
+// false otherwise.
+func WaitWithTimeout(waitGroup *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan interface{}, 0)
+	go func() {
+		waitGroup.Wait()
+		done <- nil
+	}()
+
+	timer := time.After(timeout)
+	for {
+		select {
+		case <-timer:
+			return false
+		case <-done:
+			return true
+		}
+	}
+}
+
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
-func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader) {
+func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader, shutdownTimeout time.Duration) {
 	l.Printf("listening: %s", l.Socket)
+	waitGroup := new(sync.WaitGroup)
 
 	go reloader.OnRequest(func() uintptr {
+		l.Printf("waiting %s for open connections to finish", shutdownTimeout)
+		WaitWithTimeout(waitGroup, shutdownTimeout)
+
 		l.Printf("closing listening socket for reload")
 		l.Socket.Close()
 		fd := l.Socket.Fd()
@@ -121,7 +148,11 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader) 
 
 		// Handle each incoming connection in its own goroutine.
 		l.Printf("handling new connection from %s", conn.RemoteAddr())
-		go l.handleConnection(conn, received)
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			l.handleConnection(conn, received)
+		}()
 
 		if l.connLimit > 0 && l.conns >= l.connLimit {
 			l.Printf("reached %d connections, stopping downstream listener", l.conns)

@@ -8,6 +8,7 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 )
 
 var testLogger = log.New(ioutil.Discard, "", log.LstdFlags)
@@ -64,7 +65,7 @@ func TestListener(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done))
+	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
 	<-done
 }
 
@@ -103,7 +104,7 @@ func TestListenerWithMessage(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done))
+	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
 	<-done
 }
 

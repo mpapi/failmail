@@ -29,6 +29,8 @@ type Config struct {
 	RelayAll     bool          `help:"relay all messages to the upstream server"`
 	Pidfile      string        `help:"write a pidfile to this path"`
 
+	ShutdownTimeout time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
+
 	RelayUser     string `help:"username for auth to relay server"`
 	RelayPassword string `help:"password for auth to relay server"`
 	Credentials   string `help:"username:password for authenticating to failmail"`
@@ -43,16 +45,17 @@ type Config struct {
 
 func Defaults() *Config {
 	return &Config{
-		BindAddr:    "localhost:2525",
-		RelayAddr:   "localhost:25",
-		WaitPeriod:  30 * time.Second,
-		MaxWait:     5 * time.Minute,
-		From:        DefaultFromAddress("failmail"),
-		FailDir:     "failed",
-		RateCheck:   1 * time.Minute,
-		RateWindow:  5,
-		BatchHeader: "X-Failmail-Split",
-		BindHTTP:    "localhost:8025",
+		BindAddr:        "localhost:2525",
+		RelayAddr:       "localhost:25",
+		WaitPeriod:      30 * time.Second,
+		MaxWait:         5 * time.Minute,
+		From:            DefaultFromAddress("failmail"),
+		FailDir:         "failed",
+		RateCheck:       1 * time.Minute,
+		RateWindow:      5,
+		BatchHeader:     "X-Failmail-Split",
+		BindHTTP:        "localhost:8025",
+		ShutdownTimeout: 5 * time.Second,
 	}
 }
 

@@ -75,7 +75,7 @@ func main() {
 	go reloader.HandleSignals()
 
 	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
-	go listener.Listen(received, reloader)
+	go listener.Listen(received, reloader, config.ShutdownTimeout)
 
 	// Figure out how to batch messages into separate summary emails. By
 	// default, use the value of the --batch-header argument (falling back to
