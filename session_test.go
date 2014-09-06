@@ -215,3 +215,42 @@ func TestSessionAdvance(t *testing.T) {
 		t.Errorf("QUIT should get a 221 response")
 	}
 }
+
+func TestSingleUserPlainAuth(t *testing.T) {
+	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+	valid, err := auth.ValidCredentials("testuser\x00testuser\x00testpass")
+
+	if !valid {
+		t.Errorf("expected valid credentials")
+	}
+
+	if err != nil {
+		t.Errorf("expected no errors validating credentials")
+	}
+}
+
+func TestSingleUserPlainAuthBadCredentials(t *testing.T) {
+	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+	valid, err := auth.ValidCredentials("testuser\x00testuser\x00badpass")
+
+	if valid {
+		t.Errorf("expected invalid credentials")
+	}
+
+	if err != nil {
+		t.Errorf("expected no errors validating credentials")
+	}
+}
+
+func TestSingleUserPlainAuthError(t *testing.T) {
+	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+	valid, err := auth.ValidCredentials("testuser\x00testpass")
+
+	if valid {
+		t.Errorf("expected invalid credentials")
+	}
+
+	if err == nil {
+		t.Errorf("expected errors validating credentials")
+	}
+}
