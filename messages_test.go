@@ -78,7 +78,7 @@ func TestReceivedMessageOutgoingParts(t *testing.T) {
 func TestCompact(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
-	uniques := Compact(SameSubject(), []*ReceivedMessage{msg1, msg2})
+	uniques := Compact(GroupByExpr("batch", `{{.Header.Get "Subject"}}`), []*ReceivedMessage{msg1, msg2})
 	if count := len(uniques); count != 1 {
 		t.Errorf("expected one unique message from Compact(), got %d", count)
 	}
@@ -105,7 +105,7 @@ func TestSummarize(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
 
-	summarized := Summarize(SameSubject(), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
+	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
 
 	if summarized.From != "failmail@example.com" {
 		t.Errorf("unexpected from address from Summarize(): %s", summarized.From)
@@ -119,7 +119,7 @@ func TestSummarize(t *testing.T) {
 }
 
 func TestMessageBuffer(t *testing.T) {
-	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject(), "test@example.com")
+	buf := NewMessageBuffer(5*time.Second, 9*time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), "test@example.com")
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
@@ -184,7 +184,7 @@ func TestMessageBuffer(t *testing.T) {
 }
 
 func TestFlushForce(t *testing.T) {
-	buf := NewMessageBuffer(5*time.Second, 9*time.Second, SameSubject(), SameSubject(), "test@example.com")
+	buf := NewMessageBuffer(5*time.Second, 9*time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), "test@example.com")
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
@@ -259,46 +259,6 @@ func TestPlural(t *testing.T) {
 	}
 	if p := Plural(11, "message", "messages"); p != "11 messages" {
 		t.Errorf("unexpected plural: %s", p)
-	}
-}
-
-func TestReplacedSubject(t *testing.T) {
-	groupBy := ReplacedSubject(`\d+`, "#")
-	key := groupBy(makeReceivedMessage(t, "Subject: message 1 of 20\r\n\r\ntest\r\n"))
-	if key != "message # of #" {
-		t.Errorf("unexpected grouping: %s", key)
-	}
-}
-
-func TestMatchingSubject(t *testing.T) {
-	groupBy := MatchingSubject(`^myapp: `)
-	key := groupBy(makeReceivedMessage(t, "Subject: myapp: error in foo\r\n\r\ntest\r\n"))
-	if key != "myapp: " {
-		t.Errorf("unexpected grouping: %s", key)
-	}
-}
-
-func TestSameSubject(t *testing.T) {
-	groupBy := SameSubject()
-	key := groupBy(makeReceivedMessage(t, "Subject: test\r\n\r\ntest\r\n"))
-	if key != "test" {
-		t.Errorf("unexpected grouping: %s", key)
-	}
-}
-
-func TestHeader(t *testing.T) {
-	groupBy := Header("X-Failmail", "default")
-	key := groupBy(makeReceivedMessage(t, "Subject: test\r\nX-Failmail: errors\r\n\r\ntest\r\n"))
-	if key != "errors" {
-		t.Errorf("unexpected grouping: %s", key)
-	}
-}
-
-func TestHeaderDefault(t *testing.T) {
-	groupBy := Header("X-Failmail", "default")
-	key := groupBy(makeReceivedMessage(t, "Subject: test\r\n\r\ntest\r\n"))
-	if key != "default" {
-		t.Errorf("unexpected grouping: %s", key)
 	}
 }
 

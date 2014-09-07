@@ -78,7 +78,7 @@ func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
 	uniques := make(map[string]*UniqueMessage)
 	result := make([]*UniqueMessage, 0)
 	for _, msg := range received {
-		key := group(msg)
+		key, _ := group(msg)
 
 		if _, ok := uniques[key]; !ok {
 			unique := &UniqueMessage{Template: key}
@@ -225,7 +225,7 @@ func NormalizeAddress(email string) string {
 }
 
 func (b *MessageBuffer) Add(msg *ReceivedMessage) {
-	key := b.Batch(msg)
+	key, _ := b.Batch(msg)
 	for _, to := range msg.To {
 		recipKey := RecipientKey{key, NormalizeAddress(to)}
 		now := nowGetter()
@@ -317,33 +317,24 @@ func DefaultFromAddress(name string) string {
 
 // TODO write full-text HTML and keep them for n days
 
-type GroupBy func(*ReceivedMessage) string
+type GroupBy func(*ReceivedMessage) (string, error)
 
-func ReplacedSubject(pattern string, replace string) GroupBy {
-	re := regexp.MustCompile(pattern)
-	return func(r *ReceivedMessage) string {
-		return re.ReplaceAllString(r.Message.Header.Get("Subject"), replace)
+func GroupByExpr(name string, expr string) GroupBy {
+	funcMap := make(map[string]interface{})
+	funcMap["match"] = func(pat string, text string) (string, error) {
+		re, err := regexp.Compile(pat)
+		return re.FindString(text), err
 	}
-}
-
-func MatchingSubject(pattern string) GroupBy {
-	re := regexp.MustCompile(pattern)
-	return func(r *ReceivedMessage) string {
-		return strings.Join(re.FindAllString(r.Message.Header.Get("Subject"), -1), "")
+	funcMap["replace"] = func(pat string, text string, sub string) (string, error) {
+		re, err := regexp.Compile(pat)
+		return re.ReplaceAllString(text, sub), err
 	}
-}
 
-func SameSubject() GroupBy {
-	return func(r *ReceivedMessage) string {
-		return strings.TrimSpace(r.Message.Header.Get("Subject"))
-	}
-}
+	tmpl := template.Must(template.New(name).Funcs(funcMap).Parse(expr))
 
-func Header(header string, defaultValue string) GroupBy {
-	return func(r *ReceivedMessage) string {
-		if val, ok := r.Message.Header[header]; len(val) == 1 && ok {
-			return val[0]
-		}
-		return defaultValue
+	return func(r *ReceivedMessage) (string, error) {
+		buf := new(bytes.Buffer)
+		err := tmpl.Execute(buf, r.Message)
+		return buf.String(), err
 	}
 }

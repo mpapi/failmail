@@ -143,6 +143,6 @@ func makeSummaryMessage(t *testing.T, data ...string) *SummaryMessage {
 		Subject:          "test",
 		Date:             time.Now(),
 		ReceivedMessages: msgs,
-		UniqueMessages:   Compact(SameSubject(), msgs),
+		UniqueMessages:   Compact(GroupByExpr("group", `{{.Header.Get "Subject"}}`), msgs),
 	}
 }
