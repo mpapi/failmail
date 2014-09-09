@@ -13,6 +13,9 @@
 - Added initial support for STARTTLS, to allow the use of encrypted connections
   to `failmail` from clients.
 
+- Added the ability to customize the way messages are batched into summary
+  messages, and grouped within summary messages, using template strings.
+
 ## For operators
 
 - Added initial support for zero-downtime reloads/upgrades. On receiving

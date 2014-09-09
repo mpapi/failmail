@@ -79,6 +79,8 @@ The settings are described below:
 
     an expression used to determine how messages are batched into summary emails
 
+    (See "Configuring message batching" below.)
+
 * `--bind-addr` (default: `"localhost:2525"`)
 
     local bind address
@@ -106,6 +108,8 @@ The settings are described below:
 * `--group-expr` (default: `"{{.Header.Get \"Subject\"}}"`)
 
     an expression used to determine how messages are grouped within summary emails
+
+    (See "Configuring message batching" below.)
 
 * `--max-wait` (default: `5m0s`)
 
@@ -178,6 +182,37 @@ The settings are described below:
 * `--write-config` (default: none)
 
     path to output a config file
+
+
+### Configuring message batching
+
+The `--batch-expr` and `--group-expr` options are template strings used to
+determine the way that messages are batched into summary emails and grouped
+within those summary emails. They are [Go
+templates](http://golang.org/pkg/text/template/) evaluated in the context of a
+Go [`mail.Message`](http://golang.org/pkg/net/mail/#Message). Two messages
+whose expressions evaluate to the same string are treated as belonging to the
+same group or batch.
+
+Two functions are available in addition to the usual template functions:
+
+* `match`, which takes a regular expression and a string and returns the
+  leftmost match of the pattern, e.g:
+
+          {{match "\[\w+\]" (.Header.Get "Subject")}}
+
+    will batch messages like "[bos] error in db" and "[bos] error in web"
+    together, but "[nyc] error in db" separately.
+
+* `replace`, which takes a regular expression, a string, and a replacement, and
+  returns the string with matches of the regular expression replaced by the
+  replacement string, e.g.:
+
+          {{replace "\[\w+\]" (.Header.Get "Subject") "*"}}
+
+    will batch messages like "[bos] error in db" and "[nyc] error in db"
+    together (treating them both as "[***] error in db"), but "[bos] error in
+    web" separately.
 
 
 ## Configuration examples
