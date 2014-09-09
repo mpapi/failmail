@@ -1,4 +1,4 @@
-# 0.2.0 (in progress)
+# 0.2.0 (2014-09-08)
 
 ## Core functionality
 
