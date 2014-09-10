@@ -145,11 +145,13 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 	tick := time.Tick(1 * time.Second)
 	rateCheckTick := time.Tick(rateCheck)
 
+	renderer := &DefaultRenderer{}
+
 	for {
 		select {
 		case <-tick:
 			for _, summary := range buffer.Flush(false) {
-				sending <- summary
+				sending <- renderer.Render(summary)
 			}
 		case <-rateCheckTick:
 			// Slide the window, and see if this interval trips the alert.
@@ -167,7 +169,7 @@ func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duratio
 		case <-done:
 			log.Printf("cleaning up")
 			for _, summary := range buffer.Flush(true) {
-				sending <- summary
+				sending <- renderer.Render(summary)
 			}
 			close(sending)
 			break

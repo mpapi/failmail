@@ -338,3 +338,34 @@ func GroupByExpr(name string, expr string) GroupBy {
 		return buf.String(), err
 	}
 }
+
+type SummaryRenderer interface {
+	Render(*SummaryMessage) OutgoingMessage
+}
+
+type DefaultRenderer struct{}
+
+func (r *DefaultRenderer) Render(s *SummaryMessage) OutgoingMessage {
+	return s
+}
+
+type TemplateRenderer struct {
+	Template *template.Template
+}
+
+type RenderedMessage struct {
+	RenderedParts *OutgoingParts
+}
+
+func (m *RenderedMessage) Parts() *OutgoingParts {
+	return m.RenderedParts
+}
+
+func (r *TemplateRenderer) Render(s *SummaryMessage) OutgoingMessage {
+	buf := new(bytes.Buffer)
+	err := r.Template.Execute(buf, s)
+	if err != nil {
+		fmt.Fprintf(buf, "\nError rendering message: %s\n", err)
+	}
+	return &RenderedMessage{&OutgoingParts{s.From, s.To, buf.Bytes(), s.Subject}}
+}
