@@ -8,12 +8,12 @@ import (
 func TestConfigParser(t *testing.T) {
 	parser := ConfigParser()
 
-	rest, parsed := parser.Parse("# A comment\n\ntest1 = true\ntest2=false\n")
+	rest, parsed := parser.Parse("# A comment\n\ntest1 = true\ntest2=false\ntest3 =\n> cont1\n> cont2\ntest4 = ok\n")
 	if rest != "" {
 		t.Errorf("parser left unexpected string: %s", rest)
 	}
 
-	if parsed == nil || parsed.Text != "test1 = true\ntest2=false\n" {
+	if parsed == nil || parsed.Text != "test1 = true\ntest2=false\ntest3 =\n> cont1\n> cont2\ntest4 = ok\n" {
 		t.Errorf("parsed unexpected fragment: %v", parsed)
 	}
 
@@ -21,6 +21,8 @@ func TestConfigParser(t *testing.T) {
 	blank := comment.Next
 	first := blank.Next
 	second := first.Next
+	third := second.Next
+	_ = third.Next
 
 	if key, ok := first.Get("key"); !ok || key.Text != "test1" {
 		t.Errorf("expected first result key = test1, got %s", key)
@@ -62,7 +64,7 @@ type ReadConfigTest struct {
 }
 
 func TestReadConfig(t *testing.T) {
-	buffer := bytes.NewBufferString("# A comment\n\nfirst = 1\nsecond = 2\nthird = true\n")
+	buffer := bytes.NewBufferString("# A comment\n\nfirst = 1\nsecond = 2\nthird = true\ncont =\n> foo\n> bar\n")
 	config := &ReadConfigTest{}
 	err := ReadConfig(buffer, config)
 	if err != nil {
