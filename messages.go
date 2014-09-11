@@ -119,13 +119,6 @@ func (s *SummaryMessage) writeHeaders(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "\r\n")
 }
 
-func (s *SummaryMessage) Render(tmpl *template.Template) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	s.writeHeaders(buf)
-	err := tmpl.Execute(buf, s)
-	return buf.Bytes(), err
-}
-
 func (s *SummaryMessage) Bytes() []byte {
 	buf := new(bytes.Buffer)
 	s.writeHeaders(buf)

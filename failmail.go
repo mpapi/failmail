@@ -120,9 +120,11 @@ func main() {
 		}
 		go runner(done)
 	}
-
 	go ListenHTTP(config.BindHTTP, buffer)
-	go run(buffer, rateCounter, config.RateCheck, received, sending, done, config.RelayAll)
+
+	renderer := config.SummaryRenderer()
+	go run(renderer, buffer, rateCounter, config.RateCheck, received, sending, done, config.RelayAll)
+
 	sendUpstream(sending, upstream, failedMaildir)
 
 	reloader.ReloadIfNecessary()
@@ -140,12 +142,10 @@ func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaild
 	log.Printf("done sending")
 }
 
-func run(buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
+func run(renderer SummaryRenderer, buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
 
 	tick := time.Tick(1 * time.Second)
 	rateCheckTick := time.Tick(rateCheck)
-
-	renderer := &DefaultRenderer{}
 
 	for {
 		select {

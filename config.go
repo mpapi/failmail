@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -25,6 +26,7 @@ type Config struct {
 	BindHTTP   string        `help:"local bind address for the HTTP server"`
 	RelayAll   bool          `help:"relay all messages to the upstream server"`
 	Pidfile    string        `help:"write a pidfile to this path"`
+	Template   string        `help:"path to a summary message template file"`
 
 	ShutdownTimeout time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
 
@@ -117,4 +119,12 @@ func (c *Config) Socket() (ServerSocket, error) {
 		return NewFileServerSocket(uintptr(c.SocketFd))
 	}
 	return NewTCPServerSocket(c.BindAddr)
+}
+
+func (c *Config) SummaryRenderer() SummaryRenderer {
+	if c.Template != "" {
+		tmpl := template.Must(template.ParseFiles(c.Template))
+		return &TemplateRenderer{tmpl}
+	}
+	return &DefaultRenderer{}
 }
