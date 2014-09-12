@@ -111,6 +111,12 @@ type SummaryMessage struct {
 	UniqueMessages   []*UniqueMessage
 }
 
+type SummaryStats struct {
+	TotalMessages    int
+	FirstMessageTime time.Time
+	LastMessageTime  time.Time
+}
+
 func (s *SummaryMessage) writeHeaders(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "From: %s\r\n", s.From)
 	fmt.Fprintf(buf, "To: %s\r\n", strings.Join(s.To, ", "))
@@ -119,20 +125,12 @@ func (s *SummaryMessage) writeHeaders(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "\r\n")
 }
 
-func (s *SummaryMessage) Bytes() []byte {
-	buf := new(bytes.Buffer)
-	s.writeHeaders(buf)
-
-	total := 0
+func (s *SummaryMessage) Stats() *SummaryStats {
+	var total int
 	var firstMessageTime time.Time
 	var lastMessageTime time.Time
 
-	body := new(bytes.Buffer)
-	for i, unique := range s.UniqueMessages {
-		fmt.Fprintf(body, "\r\n- Message group %d of %d: %d instances\r\n", i+1, len(s.UniqueMessages), unique.Count)
-		fmt.Fprintf(body, "  From %s to %s\r\n\r\n", unique.Start.Format(time.RFC1123Z), unique.End.Format(time.RFC1123Z))
-		fmt.Fprintf(body, "Subject: %#v\r\nBody:\r\n%s\r\n", unique.Subject, unique.Body)
-
+	for _, unique := range s.UniqueMessages {
 		total += unique.Count
 		if firstMessageTime.IsZero() || unique.Start.Before(firstMessageTime) {
 			firstMessageTime = unique.Start
@@ -141,10 +139,26 @@ func (s *SummaryMessage) Bytes() []byte {
 			lastMessageTime = unique.End
 		}
 	}
+	return &SummaryStats{total, firstMessageTime, lastMessageTime}
+}
+
+func (s *SummaryMessage) Bytes() []byte {
+	buf := new(bytes.Buffer)
+	s.writeHeaders(buf)
+
+	stats := s.Stats()
+
+	body := new(bytes.Buffer)
+	for i, unique := range s.UniqueMessages {
+		fmt.Fprintf(body, "\r\n- Message group %d of %d: %d instances\r\n", i+1, len(s.UniqueMessages), unique.Count)
+		fmt.Fprintf(body, "  From %s to %s\r\n\r\n", unique.Start.Format(time.RFC1123Z), unique.End.Format(time.RFC1123Z))
+		fmt.Fprintf(body, "Subject: %#v\r\nBody:\r\n%s\r\n", unique.Subject, unique.Body)
+
+	}
 
 	fmt.Fprintf(buf, "--- Failmail ---\r\n")
-	fmt.Fprintf(buf, "Total messages: %d\r\nUnique messages: %d\r\n", total, len(s.UniqueMessages))
-	fmt.Fprintf(buf, "Oldest message: %s\r\nNewest message: %s\r\n", firstMessageTime.Format(time.RFC1123Z), lastMessageTime.Format(time.RFC1123Z))
+	fmt.Fprintf(buf, "Total messages: %d\r\nUnique messages: %d\r\n", stats.TotalMessages, len(s.UniqueMessages))
+	fmt.Fprintf(buf, "Oldest message: %s\r\nNewest message: %s\r\n", stats.FirstMessageTime.Format(time.RFC1123Z), stats.LastMessageTime.Format(time.RFC1123Z))
 	fmt.Fprintf(buf, "%s", body.Bytes())
 	return buf.Bytes()
 }
