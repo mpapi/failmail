@@ -123,7 +123,7 @@ func (c *Config) Socket() (ServerSocket, error) {
 
 func (c *Config) SummaryRenderer() SummaryRenderer {
 	if c.Template != "" {
-		tmpl := template.Must(template.ParseFiles(c.Template))
+		tmpl := template.Must(template.New(c.Template).Funcs(SUMMARY_TEMPLATE_FUNCS).ParseFiles(c.Template))
 		return &TemplateRenderer{tmpl}
 	}
 	return &DefaultRenderer{}

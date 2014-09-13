@@ -117,6 +117,12 @@ type SummaryStats struct {
 	LastMessageTime  time.Time
 }
 
+func (s *SummaryMessage) Headers() string {
+	buf := new(bytes.Buffer)
+	s.writeHeaders(buf)
+	return buf.String()
+}
+
 func (s *SummaryMessage) writeHeaders(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "From: %s\r\n", s.From)
 	fmt.Fprintf(buf, "To: %s\r\n", strings.Join(s.To, ", "))
@@ -344,6 +350,12 @@ func GroupByExpr(name string, expr string) GroupBy {
 		err := tmpl.Execute(buf, r.Message)
 		return buf.String(), err
 	}
+}
+
+var SUMMARY_TEMPLATE_FUNCS template.FuncMap = map[string]interface{}{
+	"time": func(t time.Time) string {
+		return t.Format(time.RFC1123Z)
+	},
 }
 
 type SummaryRenderer interface {
