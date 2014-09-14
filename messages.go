@@ -380,11 +380,24 @@ func (m *RenderedMessage) Parts() *OutgoingParts {
 	return m.RenderedParts
 }
 
+func normalizeNewlines(s string) string {
+	buf := new(bytes.Buffer)
+	for i, c := range s {
+		if c == '\n' && i > 0 && s[i-1] != '\r' {
+			buf.WriteString("\r\n")
+		} else {
+			buf.WriteRune(c)
+		}
+	}
+	return buf.String()
+}
+
 func (r *TemplateRenderer) Render(s *SummaryMessage) OutgoingMessage {
 	buf := new(bytes.Buffer)
 	err := r.Template.Execute(buf, s)
 	if err != nil {
 		fmt.Fprintf(buf, "\nError rendering message: %s\n", err)
 	}
-	return &RenderedMessage{&OutgoingParts{s.From, s.To, buf.Bytes(), s.Subject}}
+	bytes := []byte(normalizeNewlines(buf.String()))
+	return &RenderedMessage{&OutgoingParts{s.From, s.To, bytes, s.Subject}}
 }
