@@ -102,7 +102,7 @@ func TestCompact(t *testing.T) {
 }
 
 func TestSummarize(t *testing.T) {
-	defer patchTime(time.Unix(1393650000, 0))()
+	defer patchTime(time.Date(2014, time.March, 1, 0, 0, 0, 0, time.UTC))()
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
 
@@ -117,7 +117,7 @@ func TestSummarize(t *testing.T) {
 	if summarized.Subject != "[failmail] 2 messages" {
 		t.Errorf("unexpected subject from Summarize(): %s", summarized.Subject)
 	}
-	if headers := summarized.Headers(); headers != "From: failmail@example.com\r\nTo: test2@example.com\r\nSubject: [failmail] 2 messages\r\nDate: 01 Mar 14 00:00 EST\r\n\r\n" {
+	if headers := summarized.Headers(); headers != "From: failmail@example.com\r\nTo: test2@example.com\r\nSubject: [failmail] 2 messages\r\nDate: 01 Mar 14 00:00 UTC\r\n\r\n" {
 		t.Errorf("unexpected headers from Summarize(): %s", headers)
 	}
 }
