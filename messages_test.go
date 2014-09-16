@@ -5,6 +5,7 @@ import (
 	"net/mail"
 	"reflect"
 	"testing"
+	"text/template"
 	"time"
 )
 
@@ -277,5 +278,20 @@ func TestNormalizeAddress(t *testing.T) {
 
 	if norm := NormalizeAddress("Test User <test@example.com>"); norm != "test@example.com" {
 		t.Errorf("unexpected normalization of address: %s", norm)
+	}
+}
+
+func TestTemplateRenderer(t *testing.T) {
+	defer patchTime(time.Date(2014, time.March, 1, 0, 0, 0, 0, time.UTC))()
+	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
+	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
+
+	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
+
+	templ := template.Must(template.New("summary").Parse("{{ range .UniqueMessages }}{{ .Count }} instances of {{ .Subject }}{{ end }}\n"))
+	renderer := &TemplateRenderer{templ}
+	parts := renderer.Render(summarized).Parts()
+	if string(parts.Bytes) != "2 instances of test\r\n" {
+		t.Errorf("unexpected rendered message: %s", parts.Bytes)
 	}
 }
