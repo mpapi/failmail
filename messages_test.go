@@ -15,33 +15,31 @@ func (r BadReader) Read(p []byte) (int, error) {
 	return 0, fmt.Errorf("bad reader")
 }
 
-func TestReceivedMessageBody(t *testing.T) {
+func TestReceivedMessageReadBody(t *testing.T) {
 	msg := makeReceivedMessage(t, "Subject: test\r\n\r\ntest body\r\n")
-	if body := msg.Body(); body != "test body\r\n" {
+	if body := msg.ReadBody(); body != "test body\r\n" {
 		t.Errorf("unexpected message body: %s", body)
 	}
-	if body := msg.Body(); body != "test body\r\n" {
+	if body := msg.ReadBody(); body != "" {
 		t.Errorf("unexpected message body on 2nd call: %s", body)
 	}
 }
 
-func TestReceivedMessageBodyMissingMessage(t *testing.T) {
+func TestReceivedMessageReadBodyMissingMessage(t *testing.T) {
 	msg := &ReceivedMessage{
-		From:    "test@example.com",
-		To:      []string{"test@example.com"},
-		Message: &mail.Message{Body: BadReader{}},
+		message: &message{From: "test@example.com", To: []string{"test@example.com"}},
+		Parsed:  &mail.Message{Body: BadReader{}},
 	}
-	if body := msg.Body(); body != "[unreadable message body]" {
+	if body := msg.ReadBody(); body != "[unreadable message body]" {
 		t.Errorf("unexpected message body for nil message: %s", body)
 	}
 }
 
-func TestReceivedMessageBodyUnreadableMessage(t *testing.T) {
+func TestReceivedMessageReadBodyUnreadableMessage(t *testing.T) {
 	msg := &ReceivedMessage{
-		From: "test@example.com",
-		To:   []string{"test@example.com"},
+		message: &message{From: "test@example.com", To: []string{"test@example.com"}},
 	}
-	if body := msg.Body(); body != "[no message body]" {
+	if body := msg.ReadBody(); body != "[no message body]" {
 		t.Errorf("unexpected message body for nil message: %s", body)
 	}
 }
@@ -58,21 +56,17 @@ func TestReceivedMessageDisplayDate(t *testing.T) {
 	}
 }
 
-func TestReceivedMessageOutgoingParts(t *testing.T) {
+func TestReceivedMessageOutgoing(t *testing.T) {
 	msg := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nSubject: test\r\n\r\ntest body\r\n")
-	parts := msg.Parts()
 
-	if parts.From != "test@example.com" {
-		t.Errorf("unexpected From part: %s", parts.From)
+	if from := msg.Sender(); from != "test@example.com" {
+		t.Errorf("unexpected from: %s", from)
 	}
-	if len(parts.To) != 1 || parts.To[0] != "test2@example.com" {
-		t.Errorf("unexpected To part: %s", parts.To)
+	if to := msg.Recipients(); len(to) != 1 || to[0] != "test2@example.com" {
+		t.Errorf("unexpected to: %s", to)
 	}
-	if string(parts.Bytes) != "test body\r\n" {
-		t.Errorf("unexpected Bytes part: %s", parts.Bytes)
-	}
-	if parts.Description != "test" {
-		t.Errorf("unexpected Description part: %s", parts.Description)
+	if body := msg.ReadBody(); body != "test body\r\n" {
+		t.Errorf("unexpected body: %s", body)
 	}
 }
 
@@ -290,8 +284,8 @@ func TestTemplateRenderer(t *testing.T) {
 
 	templ := template.Must(template.New("summary").Parse("{{ range .UniqueMessages }}{{ .Count }} instances of {{ .Subject }}{{ end }}\n"))
 	renderer := &TemplateRenderer{templ}
-	parts := renderer.Render(summarized).Parts()
-	if string(parts.Bytes) != "2 instances of test\r\n" {
-		t.Errorf("unexpected rendered message: %s", parts.Bytes)
+	rendered := renderer.Render(summarized)
+	if contents := string(rendered.Contents()); contents != "2 instances of test\r\n" {
+		t.Errorf("unexpected rendered message: %s", contents)
 	}
 }

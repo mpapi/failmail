@@ -123,11 +123,10 @@ func makeReceivedMessage(t *testing.T, data string) *ReceivedMessage {
 	if err != nil {
 		t.Fatalf("failed to build message: %s", err)
 	}
+
 	return &ReceivedMessage{
-		From:    msg.Header.Get("From"),
-		To:      msg.Header["To"],
-		Data:    data,
-		Message: msg,
+		message: &message{msg.Header.Get("From"), msg.Header["To"], []byte(data)},
+		Parsed:  msg,
 	}
 }
 

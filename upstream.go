@@ -39,10 +39,11 @@ func (u *LiveUpstream) auth() smtp.Auth {
 }
 
 func (u *LiveUpstream) Send(m OutgoingMessage) error {
-	parts := m.Parts()
-	u.Printf("sending: %s", parts.Description)
+	from := m.Sender()
+	to := m.Recipients()
+	u.Printf("sending message to %v", to)
 	auth := u.auth()
-	return smtp.SendMail(u.Addr, auth, parts.From, parts.To, parts.Bytes)
+	return smtp.SendMail(u.Addr, auth, from, to, m.Contents())
 }
 
 type DebugUpstream struct {
@@ -50,8 +51,7 @@ type DebugUpstream struct {
 }
 
 func (u *DebugUpstream) Send(m OutgoingMessage) error {
-	parts := m.Parts()
-	u.Output.Write(parts.Bytes)
+	u.Output.Write(m.Contents())
 	return nil
 }
 
@@ -60,8 +60,7 @@ type MaildirUpstream struct {
 }
 
 func (u *MaildirUpstream) Send(m OutgoingMessage) error {
-	parts := m.Parts()
-	u.Maildir.Write(parts.Bytes)
+	u.Maildir.Write(m.Contents())
 	return nil
 }
 
@@ -70,9 +69,8 @@ type ExecUpstream struct {
 }
 
 func (u *ExecUpstream) Send(m OutgoingMessage) error {
-	parts := m.Parts()
 	cmd := exec.Command("sh", "-c", u.Command)
-	cmd.Stdin = bytes.NewBuffer(parts.Bytes)
+	cmd.Stdin = bytes.NewBuffer(m.Contents())
 	return cmd.Run()
 }
 

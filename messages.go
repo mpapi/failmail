@@ -12,53 +12,54 @@ import (
 	"time"
 )
 
-type OutgoingParts struct {
-	From        string
-	To          []string
-	Bytes       []byte
-	Description string
+type OutgoingMessage interface {
+	Sender() string
+	Recipients() []string
+	Contents() []byte
 }
 
-type OutgoingMessage interface {
-	Parts() *OutgoingParts
+type message struct {
+	From string
+	To   []string
+	Data []byte
+}
+
+func (m *message) Sender() string {
+	return m.From
+}
+
+func (m *message) Recipients() []string {
+	return m.To
+}
+
+func (m *message) Contents() []byte {
+	return m.Data
 }
 
 // A message received from an SMTP client. These get compacted into
 // `UniqueMessage`s, many which are then periodically sent via an upstream
 // server in a `SummaryMessage`.
 type ReceivedMessage struct {
-	From       string
-	To         []string
-	Data       string
-	Message    *mail.Message
-	bodyCached []byte
+	*message
+	Parsed *mail.Message
 }
 
-// Returns the body of the message.
-func (r *ReceivedMessage) Body() string {
-	if r.bodyCached != nil {
-		return string(r.bodyCached)
-	} else if r.Message == nil {
+func (r *ReceivedMessage) ReadBody() string {
+	if r.Parsed == nil {
 		return "[no message body]"
-	} else if body, err := ioutil.ReadAll(r.Message.Body); err != nil {
+	} else if body, err := ioutil.ReadAll(r.Parsed.Body); err != nil {
 		return "[unreadable message body]"
 	} else {
-		r.bodyCached = body
 		return string(body)
 	}
 }
 
 func (r *ReceivedMessage) DisplayDate(def string) string {
-	if d, err := r.Message.Header.Date(); err != nil {
+	if d, err := r.Parsed.Header.Date(); err != nil {
 		return def
 	} else {
 		return d.Format(time.RFC1123Z)
 	}
-}
-
-func (r *ReceivedMessage) Parts() *OutgoingParts {
-	subj := r.Message.Header.Get("subject")
-	return &OutgoingParts{r.From, r.To, []byte(r.Body()), subj}
 }
 
 // A `UniqueMessage` is the result of compacting similar `ReceivedMessage`s.
@@ -87,7 +88,7 @@ func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
 		}
 		unique := uniques[key]
 
-		if date, err := msg.Message.Header.Date(); err == nil {
+		if date, err := msg.Parsed.Header.Date(); err == nil {
 			if unique.Start.IsZero() || date.Before(unique.Start) {
 				unique.Start = date
 			}
@@ -95,8 +96,8 @@ func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
 				unique.End = date
 			}
 		}
-		unique.Body = msg.Body()
-		unique.Subject = msg.Message.Header.Get("subject")
+		unique.Body = msg.ReadBody()
+		unique.Subject = msg.Parsed.Header.Get("subject")
 		unique.Count += 1
 	}
 	return result
@@ -109,6 +110,14 @@ type SummaryMessage struct {
 	Date             time.Time
 	ReceivedMessages []*ReceivedMessage
 	UniqueMessages   []*UniqueMessage
+}
+
+func (s *SummaryMessage) Sender() string {
+	return s.From
+}
+
+func (s *SummaryMessage) Recipients() []string {
+	return s.To
 }
 
 type SummaryStats struct {
@@ -148,7 +157,7 @@ func (s *SummaryMessage) Stats() *SummaryStats {
 	return &SummaryStats{total, firstMessageTime, lastMessageTime}
 }
 
-func (s *SummaryMessage) Bytes() []byte {
+func (s *SummaryMessage) Contents() []byte {
 	buf := new(bytes.Buffer)
 	s.writeHeaders(buf)
 
@@ -167,10 +176,6 @@ func (s *SummaryMessage) Bytes() []byte {
 	fmt.Fprintf(buf, "Oldest message: %s\r\nNewest message: %s\r\n", stats.FirstMessageTime.Format(time.RFC1123Z), stats.LastMessageTime.Format(time.RFC1123Z))
 	fmt.Fprintf(buf, "%s", body.Bytes())
 	return buf.Bytes()
-}
-
-func (s *SummaryMessage) Parts() *OutgoingParts {
-	return &OutgoingParts{s.From, s.To, s.Bytes(), s.Subject}
 }
 
 func Summarize(group GroupBy, from string, to string, received []*ReceivedMessage) *SummaryMessage {
@@ -347,57 +352,7 @@ func GroupByExpr(name string, expr string) GroupBy {
 
 	return func(r *ReceivedMessage) (string, error) {
 		buf := new(bytes.Buffer)
-		err := tmpl.Execute(buf, r.Message)
+		err := tmpl.Execute(buf, r.Parsed)
 		return buf.String(), err
 	}
-}
-
-var SUMMARY_TEMPLATE_FUNCS template.FuncMap = map[string]interface{}{
-	"time": func(t time.Time) string {
-		return t.Format(time.RFC1123Z)
-	},
-}
-
-type SummaryRenderer interface {
-	Render(*SummaryMessage) OutgoingMessage
-}
-
-type DefaultRenderer struct{}
-
-func (r *DefaultRenderer) Render(s *SummaryMessage) OutgoingMessage {
-	return s
-}
-
-type TemplateRenderer struct {
-	Template *template.Template
-}
-
-type RenderedMessage struct {
-	RenderedParts *OutgoingParts
-}
-
-func (m *RenderedMessage) Parts() *OutgoingParts {
-	return m.RenderedParts
-}
-
-func normalizeNewlines(s string) string {
-	buf := new(bytes.Buffer)
-	for i, c := range s {
-		if c == '\n' && i > 0 && s[i-1] != '\r' {
-			buf.WriteString("\r\n")
-		} else {
-			buf.WriteRune(c)
-		}
-	}
-	return buf.String()
-}
-
-func (r *TemplateRenderer) Render(s *SummaryMessage) OutgoingMessage {
-	buf := new(bytes.Buffer)
-	err := r.Template.Execute(buf, s)
-	if err != nil {
-		fmt.Fprintf(buf, "\nError rendering message: %s\n", err)
-	}
-	bytes := []byte(normalizeNewlines(buf.String()))
-	return &RenderedMessage{&OutgoingParts{s.From, s.To, bytes, s.Subject}}
 }

@@ -134,7 +134,7 @@ func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaild
 	for msg := range sending {
 		if sendErr := upstream.Send(msg); sendErr != nil {
 			log.Printf("couldn't send message: %s", sendErr)
-			if saveErr := failedMaildir.Write(msg.Parts().Bytes); saveErr != nil {
+			if saveErr := failedMaildir.Write([]byte(msg.Contents())); saveErr != nil {
 				log.Printf("couldn't save message: %s", saveErr)
 			}
 		}

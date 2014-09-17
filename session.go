@@ -90,7 +90,7 @@ type Session struct {
 func (s *Session) Start(auth Auth, hasTLS bool) Response {
 	s.initHostname()
 	s.parser = SMTPParser()
-	s.Received = &ReceivedMessage{}
+	s.Received = &ReceivedMessage{message: &message{}}
 	s.Authenticated = auth == nil
 	s.auth = auth
 	s.hasTLS = hasTLS
@@ -133,8 +133,8 @@ func (s *Session) setData(data string) (Response, *ReceivedMessage) {
 		received := s.Received
 		s.Received = &ReceivedMessage{}
 
-		received.Data = data
-		received.Message = msg
+		received.Data = []byte(data)
+		received.Parsed = msg
 		return Response{250, "Got the data"}, received
 	}
 }

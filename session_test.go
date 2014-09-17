@@ -198,7 +198,7 @@ func TestSessionAdvance(t *testing.T) {
 		t.Errorf("DATA payload should get a 250 response")
 	}
 
-	subject := msg.Message.Header.Get("subject")
+	subject := msg.Parsed.Header.Get("subject")
 	if subject != "test" {
 		t.Errorf("failed to parse subject from data payload: %s", subject)
 	}

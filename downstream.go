@@ -193,7 +193,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 			resp, msg := session.ReadData(reader)
 			resp.WriteTo(writer)
 			if msg != nil {
-				l.Printf("received message with subject %#v", msg.Message.Header.Get("Subject"))
+				l.Printf("received message with subject %#v", msg.Parsed.Header.Get("Subject"))
 				received <- msg
 			}
 		case resp.NeedsAuthResponse():

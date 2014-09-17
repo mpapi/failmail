@@ -126,5 +126,5 @@ func (c *Config) SummaryRenderer() SummaryRenderer {
 		tmpl := template.Must(template.New(c.Template).Funcs(SUMMARY_TEMPLATE_FUNCS).ParseFiles(c.Template))
 		return &TemplateRenderer{tmpl}
 	}
-	return &DefaultRenderer{}
+	return &NoRenderer{}
 }
