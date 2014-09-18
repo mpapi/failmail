@@ -12,12 +12,17 @@ import (
 	"time"
 )
 
+// `OutgoingMessage` is the interface for any message that can be sent.
+// `Sender()` and `Recipients()` are used to specify the envelope From/To, and
+// `Contents()` contains the SMTP `DATA` payload (usually an RFC822 message).
 type OutgoingMessage interface {
 	Sender() string
 	Recipients() []string
 	Contents() []byte
 }
 
+// A simple `OutgoingMessage` implementation, where the various parts are known
+// ahead of time.
 type message struct {
 	From string
 	To   []string
@@ -103,6 +108,8 @@ func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
 	return result
 }
 
+// A `SummaryMessage` is the result of rolling together several
+// `UniqueMessage`s.
 type SummaryMessage struct {
 	From             string
 	To               []string
@@ -120,12 +127,6 @@ func (s *SummaryMessage) Recipients() []string {
 	return s.To
 }
 
-type SummaryStats struct {
-	TotalMessages    int
-	FirstMessageTime time.Time
-	LastMessageTime  time.Time
-}
-
 func (s *SummaryMessage) Headers() string {
 	buf := new(bytes.Buffer)
 	s.writeHeaders(buf)
@@ -138,6 +139,12 @@ func (s *SummaryMessage) writeHeaders(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "Subject: %s\r\n", s.Subject)
 	fmt.Fprintf(buf, "Date: %s\r\n", s.Date.Format(time.RFC822))
 	fmt.Fprintf(buf, "\r\n")
+}
+
+type SummaryStats struct {
+	TotalMessages    int
+	FirstMessageTime time.Time
+	LastMessageTime  time.Time
 }
 
 func (s *SummaryMessage) Stats() *SummaryStats {

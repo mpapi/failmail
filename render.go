@@ -13,16 +13,21 @@ var SUMMARY_TEMPLATE_FUNCS template.FuncMap = map[string]interface{}{
 	},
 }
 
+// `SummaryRenderer` turns a `SummaryMessage` into an `OutgoingMessage`.
 type SummaryRenderer interface {
 	Render(*SummaryMessage) OutgoingMessage
 }
 
+// `NoRenderer` uses a `SummaryMesssage` as an `OutgoingMessage` directly.
 type NoRenderer struct{}
 
 func (r *NoRenderer) Render(s *SummaryMessage) OutgoingMessage {
 	return s
 }
 
+// `TemplateRenderer` generates an `OutgoingMessage` by passing the
+// `SummaryMessage` through a template, using the `SummaryMessage`'s envelope
+// as the envelope of the generated message.
 type TemplateRenderer struct {
 	Template *template.Template
 }
