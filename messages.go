@@ -186,13 +186,23 @@ func (s *SummaryMessage) Contents() []byte {
 }
 
 func Summarize(group GroupBy, from string, to string, received []*ReceivedMessage) *SummaryMessage {
+	uniques := Compact(group, received)
 	result := &SummaryMessage{}
+
 	result.From = from
 	result.To = []string{to}
-	result.Subject = fmt.Sprintf("[failmail] %s", Plural(len(received), "message", "messages"))
 	result.Date = nowGetter()
+
+	instances := Plural(len(received), "instance", "instances")
+	if len(uniques) == 1 {
+		result.Subject = fmt.Sprintf("[failmail] %s: %s", instances, uniques[0].Subject)
+	} else {
+		messages := Plural(len(uniques), "message", "messages")
+		result.Subject = fmt.Sprintf("[failmail] %s of %s", instances, messages)
+	}
+
 	result.ReceivedMessages = received
-	result.UniqueMessages = Compact(group, received)
+	result.UniqueMessages = uniques
 	return result
 }
 

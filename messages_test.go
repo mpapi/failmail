@@ -99,7 +99,7 @@ func TestCompact(t *testing.T) {
 func TestSummarize(t *testing.T) {
 	defer patchTime(time.Date(2014, time.March, 1, 0, 0, 0, 0, time.UTC))()
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
-	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
+	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test 2\r\n\r\ntest body 2\r\n")
 
 	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
 
@@ -109,10 +109,10 @@ func TestSummarize(t *testing.T) {
 	if !reflect.DeepEqual(summarized.To, []string{"test2@example.com"}) {
 		t.Errorf("unexpected to address from Summarize(): %#v", summarized.To)
 	}
-	if summarized.Subject != "[failmail] 2 messages" {
+	if summarized.Subject != "[failmail] 2 instances of 2 messages" {
 		t.Errorf("unexpected subject from Summarize(): %s", summarized.Subject)
 	}
-	if headers := summarized.Headers(); headers != "From: failmail@example.com\r\nTo: test2@example.com\r\nSubject: [failmail] 2 messages\r\nDate: 01 Mar 14 00:00 UTC\r\n\r\n" {
+	if headers := summarized.Headers(); headers != "From: failmail@example.com\r\nTo: test2@example.com\r\nSubject: [failmail] 2 instances of 2 messages\r\nDate: 01 Mar 14 00:00 UTC\r\n\r\n" {
 		t.Errorf("unexpected headers from Summarize(): %s", headers)
 	}
 }
@@ -168,7 +168,7 @@ func TestMessageBuffer(t *testing.T) {
 	if count := len(summaries[0].UniqueMessages); count != 1 {
 		t.Errorf("unexpected summary received unique message count: %d", count)
 	}
-	if subject := summaries[0].Subject; subject != "[failmail] 2 messages" {
+	if subject := summaries[0].Subject; subject != "[failmail] 2 instances: test" {
 		t.Errorf("unexpected summary subject: %s", subject)
 	}
 
