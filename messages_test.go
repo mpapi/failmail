@@ -123,7 +123,7 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
 	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	if count := len(buf.messages); count != 1 {
+	if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	unpatch()
@@ -136,7 +136,7 @@ func TestMessageBuffer(t *testing.T) {
 
 	unpatch = patchTime(time.Unix(1393650005, 0))
 	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 2"))
-	if count := len(buf.messages); count != 1 {
+	if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	stats := buf.Stats()
@@ -159,7 +159,7 @@ func TestMessageBuffer(t *testing.T) {
 	if len(summaries) != 1 {
 		t.Errorf("unexpected summaries from flush: %v", summaries)
 	}
-	if count := len(buf.messages); count != 0 {
+	if count := buf.Stats().ActiveBatches; count != 0 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	if count := len(summaries[0].ReceivedMessages); count != 2 {
@@ -188,7 +188,7 @@ func TestFlushForce(t *testing.T) {
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
 	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	if count := len(buf.messages); count != 1 {
+	if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	unpatch()

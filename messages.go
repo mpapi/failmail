@@ -206,16 +206,56 @@ func Summarize(group GroupBy, from string, to string, received []*ReceivedMessag
 	return result
 }
 
+type MessageStore interface {
+	Add(time.Time, RecipientKey, *ReceivedMessage)
+	InRange(time.Time, RecipientKey, time.Duration, time.Duration) bool
+	Iterate(func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool)
+}
+
+type MemoryStore struct {
+	first    map[RecipientKey]time.Time
+	last     map[RecipientKey]time.Time
+	messages map[RecipientKey][]*ReceivedMessage
+}
+
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{
+		make(map[RecipientKey]time.Time),
+		make(map[RecipientKey]time.Time),
+		make(map[RecipientKey][]*ReceivedMessage),
+	}
+}
+
+func (s *MemoryStore) InRange(now time.Time, key RecipientKey, softLimit time.Duration, hardLimit time.Duration) bool {
+	return now.Sub(s.first[key]) < hardLimit && now.Sub(s.last[key]) < softLimit
+}
+
+func (s *MemoryStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
+	if _, ok := s.first[key]; !ok {
+		s.first[key] = now
+		s.messages[key] = make([]*ReceivedMessage, 0)
+	}
+	s.last[key] = now
+	s.messages[key] = append(s.messages[key], msg)
+}
+
+func (s *MemoryStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) {
+	for key, msgs := range s.messages {
+		if callback(key, msgs, s.first[key], s.last[key]) {
+			delete(s.messages, key)
+			delete(s.first, key)
+			delete(s.last, key)
+		}
+	}
+}
+
 type MessageBuffer struct {
-	SoftLimit    time.Duration
-	HardLimit    time.Duration
-	Batch        GroupBy // determines how messages are split into summary emails
-	Group        GroupBy // determines how messages are grouped within summary emails
-	From         string
-	first        map[RecipientKey]time.Time
-	last         map[RecipientKey]time.Time
-	messages     map[RecipientKey][]*ReceivedMessage
-	lastReceived time.Time
+	SoftLimit time.Duration
+	HardLimit time.Duration
+	Batch     GroupBy // determines how messages are split into summary emails
+	Group     GroupBy // determines how messages are grouped within summary emails
+	From      string
+	Store     MessageStore
 }
 
 func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy, from string) *MessageBuffer {
@@ -225,29 +265,20 @@ func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch Gr
 		batch,
 		group,
 		from,
-		make(map[RecipientKey]time.Time),
-		make(map[RecipientKey]time.Time),
-		make(map[RecipientKey][]*ReceivedMessage),
-		time.Time{},
+		NewMemoryStore(),
 	}
-}
-
-func (b *MessageBuffer) checkWithinLimits(now time.Time, key RecipientKey) bool {
-	return now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit
 }
 
 func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
-	for key, msgs := range b.messages {
-		if !force && b.checkWithinLimits(now, key) {
-			continue
+	b.Store.Iterate(func(key RecipientKey, msgs []*ReceivedMessage, first time.Time, last time.Time) bool {
+		if !force && b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
+			return false
 		}
 		summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, msgs))
-		delete(b.messages, key)
-		delete(b.first, key)
-		delete(b.last, key)
-	}
+		return true
+	})
 	return summaries
 }
 
@@ -264,25 +295,26 @@ func (b *MessageBuffer) Add(msg *ReceivedMessage) {
 	for _, to := range msg.To {
 		recipKey := RecipientKey{key, NormalizeAddress(to)}
 		now := nowGetter()
-		if _, ok := b.first[recipKey]; !ok {
-			b.first[recipKey] = now
-			b.messages[recipKey] = make([]*ReceivedMessage, 0)
-		}
-		b.last[recipKey] = now
-		b.messages[recipKey] = append(b.messages[recipKey], msg)
-		b.lastReceived = now
+		b.Store.Add(now, recipKey, msg)
 	}
 }
 
 func (b *MessageBuffer) Stats() *BufferStats {
+	uniqueMessages := 0
 	allMessages := 0
 	now := nowGetter()
-	for key, msgs := range b.messages {
-		if b.checkWithinLimits(now, key) {
+	var lastReceived time.Time
+	b.Store.Iterate(func(key RecipientKey, msgs []*ReceivedMessage, first time.Time, last time.Time) bool {
+		if b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
 			allMessages += len(msgs)
 		}
-	}
-	return &BufferStats{len(b.messages), allMessages, b.lastReceived}
+		if lastReceived.Before(last) {
+			lastReceived = last
+		}
+		uniqueMessages += 1
+		return false
+	})
+	return &BufferStats{uniqueMessages, allMessages, lastReceived}
 }
 
 type RecipientKey struct {
