@@ -13,7 +13,7 @@
 //   contains a file descriptor number that should be passed to the new
 //   failmail process so that it can continue listening on the socket.
 //
-// * Before terminating, the reloader is consulted to see if a reloas was
+// * Before terminating, the reloader is consulted to see if a reload was
 //   requested. If so, it blocks until it receives a file descriptor number
 //   from the listener goroutine, and then executes a new failmail process,
 //   passing it the same arguments it was invoked with, plus the file
