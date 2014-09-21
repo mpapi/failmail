@@ -206,12 +206,24 @@ func Summarize(group GroupBy, from string, to string, received []*ReceivedMessag
 	return result
 }
 
+// `MessageStore` is the interface that provides storage and limited retrieval
+// of messages for `MessageBuffer`.
 type MessageStore interface {
+	// Adds a message to the store, with the time it was received.
 	Add(time.Time, RecipientKey, *ReceivedMessage)
+
+	// Computes whether the receive time a message (given its key) was within a
+	// certain duration of a time. (The first duration is for the time since
+	// the message was first seen, and the second is for the time it was most
+	// recently seen.)
 	InRange(time.Time, RecipientKey, time.Duration, time.Duration) bool
+
+	// Calls a function on each message in the store, removing it from the
+	// store if the function returns true.
 	Iterate(func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool)
 }
 
+// A `MessageStore` implementation that holds received messages in memory.
 type MemoryStore struct {
 	first    map[RecipientKey]time.Time
 	last     map[RecipientKey]time.Time
