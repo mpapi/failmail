@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -74,6 +75,46 @@ func TestHostnameError(t *testing.T) {
 		t.Errorf("expected an error writing to maildir")
 	} else if err.Error() != "couldn't get hostname" {
 		t.Errorf("expected a different error writing to maildir")
+	}
+}
+
+func TestList(t *testing.T) {
+	m, cleanup := makeTestMaildir(t)
+	defer cleanup()
+
+	defer patchHost("test", nil)()
+	defer patchTime(time.Unix(1393650000, 0))()
+	defer patchPid(1000)()
+
+	if err := m.Write([]byte("From: test@example.com\r\nSubject: test\r\n\r\ntest body")); err != nil {
+		t.Errorf("couldn't write to maildir: %s", err)
+	}
+
+	items, err := m.List()
+	if err != nil {
+		t.Errorf("unexpected error listing messages: %s", err)
+	} else if !reflect.DeepEqual(items, []string{"1393650000.1000_1.test:2,S"}) {
+		t.Errorf("unexpected messages in list: %v", items)
+	}
+}
+
+func TestRead(t *testing.T) {
+	m, cleanup := makeTestMaildir(t)
+	defer cleanup()
+
+	defer patchHost("test", nil)()
+	defer patchTime(time.Unix(1393650000, 0))()
+	defer patchPid(1000)()
+
+	if err := m.Write([]byte("From: test@example.com\r\nSubject: test\r\n\r\ntest body")); err != nil {
+		t.Errorf("couldn't write to maildir: %s", err)
+	}
+
+	msg, err := m.Read("1393650000.1000_1.test:2,S")
+	if err != nil {
+		t.Errorf("unexpected error reading message: %s", err)
+	} else if subj := msg.Header.Get("Subject"); subj != "test" {
+		t.Errorf("unexpected subject for message: %s", subj)
 	}
 }
 

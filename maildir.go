@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"net/mail"
 	"os"
 	"path"
 )
@@ -46,4 +47,29 @@ func (m *Maildir) Write(bytes []byte) error {
 	}
 
 	return os.Rename(tmpName, curName)
+}
+
+func (m *Maildir) List() ([]string, error) {
+	files, err := ioutil.ReadDir(path.Join(m.Path, "cur"))
+	if err != nil {
+		return []string{}, err
+	}
+
+	result := make([]string, 0)
+	for _, file := range files {
+		if !file.IsDir() {
+			result = append(result, file.Name())
+		}
+	}
+	return result, nil
+}
+
+func (m *Maildir) Read(name string) (*mail.Message, error) {
+	file, err := os.Open(path.Join(m.Path, "cur", name))
+	defer file.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return mail.ReadMessage(file)
 }
