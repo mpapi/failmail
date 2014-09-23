@@ -49,6 +49,7 @@ func (m *Maildir) Write(bytes []byte) error {
 	return os.Rename(tmpName, curName)
 }
 
+// Returns the filenames of the messages in the "cur" directory of the maildir.
 func (m *Maildir) List() ([]string, error) {
 	files, err := ioutil.ReadDir(path.Join(m.Path, "cur"))
 	if err != nil {
@@ -64,6 +65,8 @@ func (m *Maildir) List() ([]string, error) {
 	return result, nil
 }
 
+// Returns the message in the "cur" directory of the maildir, given the
+// filename (e.g. from `List()`).
 func (m *Maildir) Read(name string) (*mail.Message, error) {
 	file, err := os.Open(path.Join(m.Path, "cur", name))
 	defer file.Close()
