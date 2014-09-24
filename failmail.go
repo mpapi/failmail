@@ -127,7 +127,9 @@ func main() {
 
 	sendUpstream(sending, upstream, failedMaildir)
 
-	reloader.ReloadIfNecessary()
+	if err := reloader.ReloadIfNecessary(); err != nil {
+		log.Fatalf("failed to reload: %s", err)
+	}
 }
 
 func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {

@@ -66,9 +66,12 @@ func (r *Reloader) OnRequest(getFd func() uintptr) {
 	r.replies <- getFd()
 }
 
-func (r *Reloader) ReloadIfNecessary() {
+// This should be called before shutting down, to check whether the program
+// should invoke a new copy of itself (which will be given the listening TCP
+// socket) before terminating, and to execute that new copy.
+func (r *Reloader) ReloadIfNecessary() error {
 	if !r.needsReload {
-		return
+		return nil
 	}
 
 	fd := <-r.replies
@@ -98,8 +101,5 @@ func (r *Reloader) ReloadIfNecessary() {
 	// descriptor error when it tries to use the socket.
 	cmd.ExtraFiles = []*os.File{os.NewFile(fd, "sock")}
 
-	if err := cmd.Start(); err != nil {
-		log.Fatalf("failed to start new proc: %s", err)
-
-	}
+	return cmd.Start()
 }
