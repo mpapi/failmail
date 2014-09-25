@@ -14,6 +14,7 @@ type Maildir struct {
 	messageCounter int
 }
 
+// Creates a new maildir, with the necessary subdirectories.
 func (m *Maildir) Create() error {
 	paths := []string{".", "cur", "new", "tmp"}
 	for _, p := range paths {
@@ -24,6 +25,7 @@ func (m *Maildir) Create() error {
 	return nil
 }
 
+// Returns the next unique name for an incoming message.
 func (m *Maildir) NextUniqueName() (string, error) {
 	host, err := hostGetter()
 	if err != nil {
@@ -33,6 +35,7 @@ func (m *Maildir) NextUniqueName() (string, error) {
 	return fmt.Sprintf("%d.%d_%d.%s", nowGetter().Unix(), pidGetter(), m.messageCounter, host), nil
 }
 
+// Writes a new message to the maildir.
 func (m *Maildir) Write(bytes []byte) error {
 	name, err := m.NextUniqueName()
 	if err != nil {
