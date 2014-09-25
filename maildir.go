@@ -8,6 +8,8 @@ import (
 	"path"
 )
 
+// Maildir stores and retrieves messages in maildir format, under a specific
+// directory.
 type Maildir struct {
 	Path string
 
