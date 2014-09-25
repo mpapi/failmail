@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/textproto"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -131,5 +132,20 @@ func sendAndExpect(conn *textproto.Conn, t *testing.T, line string, code int) {
 	_, _, err = conn.ReadCodeLine(code)
 	if err != nil {
 		t.Errorf("unexpected response from server: %s", err)
+	}
+}
+
+func TestWaitWithTimeoutNoTimeout(t *testing.T) {
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	if noTimeout := WaitWithTimeout(wg, 10*time.Millisecond); noTimeout {
+		t.Errorf("expected a timeout from WaitWithTimeout")
+	}
+}
+
+func TestWaitWithTimeout(t *testing.T) {
+	wg := new(sync.WaitGroup)
+	if noTimeout := WaitWithTimeout(wg, 10*time.Millisecond); !noTimeout {
+		t.Errorf("expected no timeout from WaitWithTimeout")
 	}
 }
