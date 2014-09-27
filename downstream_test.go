@@ -160,6 +160,44 @@ func TestListenerWithAuth(t *testing.T) {
 	<-done
 }
 
+func TestListenerWithPartialAuth(t *testing.T) {
+	socket, err := NewTCPServerSocket("localhost:40029")
+	if err != nil {
+		t.Fatalf("failed to create socket")
+	}
+	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
+	listener := &Listener{Logger: testLogger, Socket: socket, connLimit: 1, Auth: auth}
+	received := make(chan *ReceivedMessage, 1)
+	done := make(chan bool, 0)
+
+	go func() {
+		conn, err := textproto.Dial("tcp", "localhost:40029")
+		if err != nil {
+			t.Fatalf("failed to connect to listener: %s", err)
+		}
+
+		_, _, err = conn.ReadCodeLine(220)
+		if err != nil {
+			t.Errorf("unexpected response from server: %s", err)
+		}
+
+		sendAndExpect(conn, t, "HELO localhost", 250)
+		sendAndExpect(conn, t, "AUTH PLAIN", 334)
+		sendAndExpect(conn, t, "dGVzdAB0ZXN0AHRlc3Q=", 235)
+		sendAndExpect(conn, t, "QUIT", 221)
+
+		err = conn.Close()
+		if err != nil {
+			t.Errorf("failed to close listener: %s", err)
+		}
+
+		done <- true
+	}()
+
+	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
+	<-done
+}
+
 func sendAndExpect(conn *textproto.Conn, t *testing.T, line string, code int) {
 	err := conn.PrintfLine(line)
 	if err != nil {
