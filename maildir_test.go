@@ -98,6 +98,19 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListInvalidDir(t *testing.T) {
+	m := &Maildir{Path: "/does-not-exist"}
+	files, err := m.List()
+
+	if err == nil {
+		t.Errorf("expected an error from List")
+	}
+
+	if len(files) != 0 {
+		t.Errorf("expected an empty slice from List")
+	}
+}
+
 func TestRead(t *testing.T) {
 	m, cleanup := makeTestMaildir(t)
 	defer cleanup()
