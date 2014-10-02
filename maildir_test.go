@@ -23,6 +23,14 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+func TestCreateInvalidDir(t *testing.T) {
+	m := &Maildir{Path: "/does-not-exist"}
+
+	if err := m.Create(); err == nil {
+		t.Errorf("expected an error from Create")
+	}
+}
+
 func TestNextUniqueName(t *testing.T) {
 	m, cleanup := makeTestMaildir(t)
 	defer cleanup()
