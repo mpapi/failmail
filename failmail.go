@@ -77,15 +77,6 @@ func main() {
 	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
 	go listener.Listen(received, reloader, config.ShutdownTimeout)
 
-	// Figure out how to batch messages into separate summary emails. By
-	// default, use the value of the --batch-header argument (falling back to
-	// empty string, meaning all messages end up in the same summary email).
-	batch := config.Batch()
-
-	// Figure out how to group like messages within a summary. By default,
-	// those with the same subject are considered the same.
-	group := config.Group()
-
 	if config.Pidfile != "" {
 		writePidfile(config.Pidfile)
 		defer os.Remove(config.Pidfile)
@@ -93,7 +84,7 @@ func main() {
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
-	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, batch, group, config.From)
+	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, config.Batch(), config.Group(), config.From)
 
 	// A `RateCounter` watches the rate at which incoming messages are arriving
 	// and can determine whether we've exceeded some threshold, for alerting.
