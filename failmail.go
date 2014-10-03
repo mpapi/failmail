@@ -5,8 +5,6 @@ import (
 	"github.com/hut8labs/failmail/configure"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 )
 
@@ -46,16 +44,8 @@ func main() {
 	// A channel for outgoing messages.
 	sending := make(chan OutgoingMessage, 64)
 
-	// Handle SIGINT and SIGTERM for cleaner shutdown.
-	signals := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
-	go func() {
-		for sig := range signals {
-			log.Printf("caught signal %s", sig)
-			done <- true
-		}
-	}()
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	// Handle signals for reloading/shutdown.
+	done := HandleSignals()
 
 	auth, err := config.Auth()
 	if err != nil {
@@ -71,8 +61,7 @@ func main() {
 		log.Fatalf("failed to create socket for listener: %s", err)
 	}
 
-	reloader := NewReloader(done)
-	go reloader.HandleSignals()
+	reloader := NewReloader()
 
 	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
 	go listener.Listen(received, reloader, config.ShutdownTimeout)
@@ -114,7 +103,7 @@ func main() {
 	go ListenHTTP(config.BindHTTP, buffer)
 
 	renderer := config.SummaryRenderer()
-	go run(renderer, buffer, rateCounter, config.RateCheck, received, sending, done, config.RelayAll)
+	go run(renderer, buffer, rateCounter, config.RateCheck, reloader, received, sending, done, config.RelayAll)
 
 	sendUpstream(sending, upstream, failedMaildir)
 
@@ -135,7 +124,7 @@ func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaild
 	log.Printf("done sending")
 }
 
-func run(renderer SummaryRenderer, buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan bool, relayAll bool) {
+func run(renderer SummaryRenderer, buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, reloader *Reloader, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan TerminationRequest, relayAll bool) {
 
 	tick := time.Tick(1 * time.Second)
 	rateCheckTick := time.Tick(rateCheck)
@@ -159,7 +148,10 @@ func run(renderer SummaryRenderer, buffer *MessageBuffer, rateCounter *RateCount
 			if relayAll {
 				sending <- msg
 			}
-		case <-done:
+		case req := <-done:
+			if req == Reload {
+				reloader.RequestReload()
+			}
 			log.Printf("cleaning up")
 			for _, summary := range buffer.Flush(true) {
 				sending <- renderer.Render(summary)

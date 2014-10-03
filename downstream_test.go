@@ -68,7 +68,7 @@ func TestListener(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
+	listener.Listen(received, NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -107,7 +107,7 @@ func TestListenerWithMessage(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
+	listener.Listen(received, NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -158,7 +158,7 @@ func TestListenerWithAuth(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
+	listener.Listen(received, NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -196,7 +196,7 @@ func TestListenerWithPartialAuth(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
+	listener.Listen(received, NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -239,7 +239,7 @@ func TestListenerWithTLS(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(done), 100*time.Millisecond)
+	listener.Listen(received, NewReloader(), 100*time.Millisecond)
 	<-done
 }
 

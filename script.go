@@ -102,14 +102,14 @@ func playActions(actions []*TestAction) {
 	// TODO
 }
 
-func runScript(filename string) (func(chan<- bool), error) {
+func runScript(filename string) (func(chan<- TerminationRequest), error) {
 	_, err := parseTestActions(filename)
 	if err != nil {
-		return func(done chan<- bool) { done <- true }, err
+		return func(done chan<- TerminationRequest) { done <- GracefulShutdown }, err
 	}
 
-	runner := func(done chan<- bool) {
-		done <- true
+	runner := func(done chan<- TerminationRequest) {
+		done <- GracefulShutdown
 	}
 	return runner, nil
 }

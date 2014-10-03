@@ -29,9 +29,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 )
 
 // Reloader holds references to channels used for processing a reload request,
@@ -39,26 +37,18 @@ import (
 // `ReloadIfNecessary()` method does the heavy lifting of spawning a new child
 // process.
 type Reloader struct {
-	cleanupRequests chan<- bool
-	requests        chan bool
-	replies         chan uintptr
-	needsReload     bool
+	requests    chan bool
+	replies     chan uintptr
+	needsReload bool
 }
 
-func NewReloader(cleanupRequests chan<- bool) *Reloader {
-	return &Reloader{cleanupRequests, make(chan bool, 1), make(chan uintptr, 1), false}
+func NewReloader() *Reloader {
+	return &Reloader{make(chan bool, 1), make(chan uintptr, 1), false}
 }
 
-func (r *Reloader) HandleSignals() {
-	reloadSig := make(chan os.Signal, 1)
-	signal.Notify(reloadSig, syscall.SIGUSR1)
-
-	for sig := range reloadSig {
-		log.Printf("caught signal %s for reload", sig)
-		r.needsReload = true
-		r.cleanupRequests <- true
-		r.requests <- true
-	}
+func (r *Reloader) RequestReload() {
+	r.needsReload = true
+	r.requests <- true
 }
 
 func (r *Reloader) OnRequest(getFd func() uintptr) {
