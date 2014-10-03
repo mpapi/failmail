@@ -171,8 +171,8 @@ func run(renderer SummaryRenderer, buffer *MessageBuffer, rateCounter *RateCount
 }
 
 func writePidfile(pidfile string) {
-	if _, err := os.Stat(pidfile); !os.IsNotExist(err) {
-		log.Fatalf("could not write pidfile %s: %s", pidfile, err)
+	if _, err := os.Stat(pidfile); err != nil && !os.IsNotExist(err) {
+		log.Fatalf("could not write pidfile %s: %v", pidfile, err)
 	} else if err == nil {
 		log.Fatalf("pidfile %s already exists", pidfile)
 	}
