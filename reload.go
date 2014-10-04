@@ -65,6 +65,10 @@ func (r *Reloader) ReloadIfNecessary() error {
 	}
 
 	fd := <-r.replies
+	return r.doReload(fd)
+}
+
+func (r *Reloader) doReload(fd uintptr) error {
 	log.Printf("passing socket with fd %d", fd)
 
 	// Remove socket-fd from args.
