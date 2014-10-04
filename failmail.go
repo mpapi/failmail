@@ -45,7 +45,8 @@ func main() {
 	sending := make(chan OutgoingMessage, 64)
 
 	// Handle signals for reloading/shutdown.
-	done := HandleSignals()
+	done := make(chan TerminationRequest, 1)
+	go HandleSignals(done)
 
 	auth, err := config.Auth()
 	if err != nil {
