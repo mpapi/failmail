@@ -54,6 +54,9 @@ func main() {
 	}
 
 	tlsConfig, err := config.TLSConfig()
+	if err != nil {
+		log.Fatalf("failed to configure TLS: %s", err)
+	}
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
