@@ -42,7 +42,7 @@ func main() {
 	received := make(chan *ReceivedMessage, 64)
 
 	// A channel for outgoing messages.
-	sending := make(chan OutgoingMessage, 64)
+	outgoing := make(chan OutgoingMessage, 64)
 
 	// Handle signals for reloading/shutdown.
 	done := make(chan TerminationRequest, 1)
@@ -79,10 +79,6 @@ func main() {
 	// them up and when to relay them to an upstream SMTP server.
 	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, config.Batch(), config.Group(), config.From)
 
-	// A `RateCounter` watches the rate at which incoming messages are arriving
-	// and can determine whether we've exceeded some threshold, for alerting.
-	rateCounter := NewRateCounter(config.RateLimit, config.RateWindow)
-
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.
 	upstream, err := config.Upstream()
@@ -106,18 +102,24 @@ func main() {
 	}
 	go ListenHTTP(config.BindHTTP, buffer)
 
-	renderer := config.SummaryRenderer()
-	go run(renderer, buffer, rateCounter, config.RateCheck, reloader, received, sending, done, config.RelayAll)
+	relay := &MessageRelay{
+		Renderer:    config.SummaryRenderer(),
+		Buffer:      buffer,
+		RateCounter: NewRateCounter(config.RateLimit, config.RateWindow),
+		Reloader:    reloader,
+		RelayAll:    config.RelayAll,
+	}
+	go relay.Run(received, done, outgoing)
 
-	sendUpstream(sending, upstream, failedMaildir)
+	sendUpstream(outgoing, upstream, failedMaildir)
 
 	if err := reloader.ReloadIfNecessary(); err != nil {
 		log.Fatalf("failed to reload: %s", err)
 	}
 }
 
-func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
-	for msg := range sending {
+func sendUpstream(outgoing <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
+	for msg := range outgoing {
 		if sendErr := upstream.Send(msg); sendErr != nil {
 			log.Printf("couldn't send message: %s", sendErr)
 			if saveErr := failedMaildir.Write([]byte(msg.Contents())); saveErr != nil {
@@ -128,39 +130,50 @@ func sendUpstream(sending <-chan OutgoingMessage, upstream Upstream, failedMaild
 	log.Printf("done sending")
 }
 
-func run(renderer SummaryRenderer, buffer *MessageBuffer, rateCounter *RateCounter, rateCheck time.Duration, reloader *Reloader, received <-chan *ReceivedMessage, sending chan<- OutgoingMessage, done <-chan TerminationRequest, relayAll bool) {
+type MessageRelay struct {
+	Renderer SummaryRenderer
 
+	Buffer      *MessageBuffer
+	RateCounter *RateCounter
+	RateCheck   time.Duration
+
+	Reloader *Reloader
+
+	RelayAll bool
+}
+
+func (r *MessageRelay) Run(received <-chan *ReceivedMessage, done <-chan TerminationRequest, outgoing chan<- OutgoingMessage) {
 	tick := time.Tick(1 * time.Second)
-	rateCheckTick := time.Tick(rateCheck)
+	rateCheckTick := time.Tick(r.RateCheck)
 
 	for {
 		select {
 		case <-tick:
-			for _, summary := range buffer.Flush(false) {
-				sending <- renderer.Render(summary)
+			for _, summary := range r.Buffer.Flush(false) {
+				outgoing <- r.Renderer.Render(summary)
 			}
 		case <-rateCheckTick:
 			// Slide the window, and see if this interval trips the alert.
-			exceeded, count := rateCounter.CheckAndAdvance()
+			exceeded, count := r.RateCounter.CheckAndAdvance()
 			if exceeded {
 				// TODO actually send an email here, eventually
 				log.Printf("rate limit check exceeded: %d messages", count)
 			}
 		case msg := <-received:
-			buffer.Add(msg)
-			rateCounter.Add(1)
-			if relayAll {
-				sending <- msg
+			r.Buffer.Add(msg)
+			r.RateCounter.Add(1)
+			if r.RelayAll {
+				outgoing <- msg
 			}
 		case req := <-done:
 			if req == Reload {
-				reloader.RequestReload()
+				r.Reloader.RequestReload()
 			}
 			log.Printf("cleaning up")
-			for _, summary := range buffer.Flush(true) {
-				sending <- renderer.Render(summary)
+			for _, summary := range r.Buffer.Flush(true) {
+				outgoing <- r.Renderer.Render(summary)
 			}
-			close(sending)
+			close(outgoing)
 			break
 		}
 	}
