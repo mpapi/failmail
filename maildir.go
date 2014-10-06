@@ -76,7 +76,19 @@ func (m *Maildir) List() ([]string, error) {
 }
 
 // Returns the message in the "cur" directory of the maildir, given the
-// filename (e.g. from `List()`).
+// filename (e.g. from `List()`), as a byte slice.
+func (m *Maildir) ReadBytes(name string) ([]byte, error) {
+	file, err := os.Open(m.path(name))
+	defer file.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return ioutil.ReadAll(file)
+}
+
+// Returns the message in the "cur" directory of the maildir, given the
+// filename (e.g. from `List()`), as a parsed `mail.Message`.
 func (m *Maildir) Read(name string) (*mail.Message, error) {
 	file, err := os.Open(m.path(name))
 	defer file.Close()
@@ -85,4 +97,10 @@ func (m *Maildir) Read(name string) (*mail.Message, error) {
 	}
 
 	return mail.ReadMessage(file)
+}
+
+// Removes the message from the "cur" directory of the maildir, given the
+// filename (e.g. from `List()`).
+func (m *Maildir) Remove(name string) error {
+	return os.Remove(m.path(name))
 }

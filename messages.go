@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"container/ring"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/mail"
+	"os"
 	"regexp"
 	"strings"
 	"text/template"
@@ -221,6 +223,170 @@ type MessageStore interface {
 	// Calls a function on each message in the store, removing it from the
 	// store if the function returns true.
 	Iterate(func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool)
+}
+
+// `MessageMetadata` holds data that isn't part of the RFC822 message: the
+// envelope, the time it was received, and the key used to determine the
+// summary it gets rolled into.
+type MessageMetadata struct {
+	Received    time.Time
+	Key         RecipientKey
+	MessageFrom string
+	MessageTo   []string
+}
+
+// `DiskStore` is an implementation of `MessageStore` that uses a maildir on
+// disk to hold messages. Currently, message metadata is stored in JSON files
+// alongside the messages in the maildir.
+type DiskStore struct {
+	Maildir *Maildir
+
+	// TODO Consider pulling first & last out into an embeddable struct.
+	first    map[RecipientKey]time.Time
+	last     map[RecipientKey]time.Time
+	messages map[RecipientKey][]string
+}
+
+// `NewDiskStore` creates a `DiskStore`, using `maildir` to back it. Any
+// messages already in `maildir` are used to initialize the `DiskStore`
+// effectively restoring its state e.g. after a crash.
+func NewDiskStore(maildir *Maildir) (*DiskStore, error) {
+	store := &DiskStore{
+		maildir,
+		make(map[RecipientKey]time.Time),
+		make(map[RecipientKey]time.Time),
+		make(map[RecipientKey][]string),
+	}
+
+	names, _ := maildir.List()
+	for _, name := range names {
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+
+		// Get the metadata for the message and apply it to the store as though
+		// it had been received at the time specified by the metadata.
+		md, err := store.readMetadata(name)
+		if err != nil {
+			return store, err
+		}
+		store.restore(md, name)
+	}
+	return store, nil
+}
+
+func (s *DiskStore) restore(md *MessageMetadata, name string) {
+	if first, ok := s.first[md.Key]; !ok || md.Received.Before(first) {
+		s.first[md.Key] = md.Received
+	}
+	if last, ok := s.last[md.Key]; !ok || md.Received.After(last) {
+		s.last[md.Key] = md.Received
+	}
+	if _, ok := s.messages[md.Key]; !ok {
+		s.messages[md.Key] = make([]string, 0)
+	}
+	s.messages[md.Key] = append(s.messages[md.Key], name)
+}
+
+func (s *DiskStore) writeMetadata(name string, received time.Time, key RecipientKey, msg *ReceivedMessage) error {
+	md := &MessageMetadata{
+		Received:    received,
+		Key:         key,
+		MessageFrom: msg.Sender(),
+		MessageTo:   msg.Recipients(),
+	}
+
+	if bytes, err := json.Marshal(md); err != nil {
+		return err
+	} else {
+		return ioutil.WriteFile(s.jsonPath(name), bytes, 0644)
+	}
+}
+
+func (s *DiskStore) readMetadata(name string) (*MessageMetadata, error) {
+	md := new(MessageMetadata)
+
+	if bytes, err := ioutil.ReadFile(s.jsonPath(name)); err != nil {
+		return md, err
+	} else {
+		err := json.Unmarshal(bytes, md)
+		return md, err
+	}
+}
+
+func (s *DiskStore) readMessage(name string) (*ReceivedMessage, error) {
+	metadata, err := s.readMetadata(name)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := s.Maildir.ReadBytes(name)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := bytes.NewBuffer(data)
+	msg, err := mail.ReadMessage(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ReceivedMessage{
+		&message{
+			From: metadata.MessageFrom,
+			To:   metadata.MessageTo,
+			Data: data,
+		},
+		msg,
+	}, nil
+}
+
+func (s *DiskStore) jsonPath(name string) string {
+	return s.Maildir.path("." + name + ".json")
+}
+
+func (s *DiskStore) InRange(now time.Time, key RecipientKey, softLimit time.Duration, hardLimit time.Duration) bool {
+	return now.Sub(s.first[key]) < hardLimit && now.Sub(s.last[key]) < softLimit
+}
+
+func (s *DiskStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
+	// TODO Update the interface and return errors.
+	name, _ := s.Maildir.Write(msg.Contents())
+
+	if _, ok := s.first[key]; !ok {
+		s.first[key] = now
+		s.messages[key] = make([]string, 0)
+	}
+	s.last[key] = now
+	s.messages[key] = append(s.messages[key], name)
+
+	s.writeMetadata(name, now, key, msg)
+}
+
+func (s *DiskStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) {
+	for key, names := range s.messages {
+		// Read the messages from the maildir from the message names held
+		// by the store.
+		// TODO Make this lazy; pass an object that is capable of reading them.
+		msgs := make([]*ReceivedMessage, 0, len(names))
+		for _, name := range names {
+			msg, err := s.readMessage(name)
+			if err == nil {
+				msgs = append(msgs, msg)
+			}
+		}
+
+		if callback(key, msgs, s.first[key], s.last[key]) {
+			for _, name := range s.messages[key] {
+				// TODO Update the interface, and accumulate and return errors.
+				s.Maildir.Remove(name)
+				os.Remove(s.jsonPath(name))
+			}
+			delete(s.messages, key)
+			delete(s.first, key)
+			delete(s.last, key)
+		}
+	}
 }
 
 // A `MessageStore` implementation that holds received messages in memory.
