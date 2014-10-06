@@ -60,8 +60,10 @@ func TestWrite(t *testing.T) {
 	defer patchTime(time.Unix(1393650000, 0))()
 	defer patchPid(1000)()
 
-	if err := m.Write([]byte("test mail")); err != nil {
+	if name, err := m.Write([]byte("test mail")); err != nil {
 		t.Errorf("couldn't write to maildir: %s", err)
+	} else if name != "1393650000.1000_1.test:2,S" {
+		t.Errorf("unexpected returned name: %s", name)
 	} else if entries, err := ioutil.ReadDir(path.Join(m.Path, "cur")); err != nil {
 		t.Fatalf("couldn't get entries for maildir: %s", err)
 	} else if len(entries) != 1 {
@@ -79,7 +81,7 @@ func TestHostnameError(t *testing.T) {
 
 	defer patchHost("", fmt.Errorf("couldn't get hostname"))()
 
-	if err := m.Write([]byte("test mail")); err == nil {
+	if _, err := m.Write([]byte("test mail")); err == nil {
 		t.Errorf("expected an error writing to maildir")
 	} else if err.Error() != "couldn't get hostname" {
 		t.Errorf("expected a different error writing to maildir")
@@ -94,7 +96,7 @@ func TestList(t *testing.T) {
 	defer patchTime(time.Unix(1393650000, 0))()
 	defer patchPid(1000)()
 
-	if err := m.Write([]byte("From: test@example.com\r\nSubject: test\r\n\r\ntest body")); err != nil {
+	if _, err := m.Write([]byte("From: test@example.com\r\nSubject: test\r\n\r\ntest body")); err != nil {
 		t.Errorf("couldn't write to maildir: %s", err)
 	}
 
@@ -127,7 +129,7 @@ func TestRead(t *testing.T) {
 	defer patchTime(time.Unix(1393650000, 0))()
 	defer patchPid(1000)()
 
-	if err := m.Write([]byte("From: test@example.com\r\nSubject: test\r\n\r\ntest body")); err != nil {
+	if _, err := m.Write([]byte("From: test@example.com\r\nSubject: test\r\n\r\ntest body")); err != nil {
 		t.Errorf("couldn't write to maildir: %s", err)
 	}
 

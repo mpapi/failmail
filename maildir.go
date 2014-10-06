@@ -37,21 +37,26 @@ func (m *Maildir) NextUniqueName() (string, error) {
 	return fmt.Sprintf("%d.%d_%d.%s", nowGetter().Unix(), pidGetter(), m.messageCounter, host), nil
 }
 
-// Writes a new message to the maildir.
-func (m *Maildir) Write(bytes []byte) error {
+// Writes a new message to the maildir, and returns the name of the file it
+// wrote along with any errors.
+func (m *Maildir) Write(bytes []byte) (string, error) {
 	name, err := m.NextUniqueName()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	tmpName := path.Join(m.Path, "tmp", name)
 	curName := path.Join(m.Path, "cur", name+":2,S")
 
 	if err = ioutil.WriteFile(tmpName, bytes, 0644); err != nil {
-		return err
+		return curName, err
 	}
 
-	return os.Rename(tmpName, curName)
+	return path.Base(curName), os.Rename(tmpName, curName)
+}
+
+func (m *Maildir) path(name string) string {
+	return path.Join(m.Path, "cur", name)
 }
 
 // Returns the filenames of the messages in the "cur" directory of the maildir.
@@ -73,7 +78,7 @@ func (m *Maildir) List() ([]string, error) {
 // Returns the message in the "cur" directory of the maildir, given the
 // filename (e.g. from `List()`).
 func (m *Maildir) Read(name string) (*mail.Message, error) {
-	file, err := os.Open(path.Join(m.Path, "cur", name))
+	file, err := os.Open(m.path(name))
 	defer file.Close()
 	if err != nil {
 		return nil, err
