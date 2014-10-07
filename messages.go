@@ -235,16 +235,23 @@ type MessageMetadata struct {
 	MessageTo   []string
 }
 
+type messageTimes struct {
+	first map[RecipientKey]time.Time
+	last  map[RecipientKey]time.Time
+}
+
+func (t *messageTimes) InRange(now time.Time, key RecipientKey, softLimit time.Duration, hardLimit time.Duration) bool {
+	return now.Sub(t.first[key]) < hardLimit && now.Sub(t.last[key]) < softLimit
+}
+
 // `DiskStore` is an implementation of `MessageStore` that uses a maildir on
 // disk to hold messages. Currently, message metadata is stored in JSON files
 // alongside the messages in the maildir.
 type DiskStore struct {
 	Maildir *Maildir
 
-	// TODO Consider pulling first & last out into an embeddable struct.
-	first    map[RecipientKey]time.Time
-	last     map[RecipientKey]time.Time
 	messages map[RecipientKey][]string
+	*messageTimes
 }
 
 // `NewDiskStore` creates a `DiskStore`, using `maildir` to back it. Any
@@ -253,9 +260,11 @@ type DiskStore struct {
 func NewDiskStore(maildir *Maildir) (*DiskStore, error) {
 	store := &DiskStore{
 		maildir,
-		make(map[RecipientKey]time.Time),
-		make(map[RecipientKey]time.Time),
 		make(map[RecipientKey][]string),
+		&messageTimes{
+			make(map[RecipientKey]time.Time),
+			make(map[RecipientKey]time.Time),
+		},
 	}
 
 	names, _ := maildir.List()
@@ -345,10 +354,6 @@ func (s *DiskStore) jsonPath(name string) string {
 	return s.Maildir.path("." + name + ".json")
 }
 
-func (s *DiskStore) InRange(now time.Time, key RecipientKey, softLimit time.Duration, hardLimit time.Duration) bool {
-	return now.Sub(s.first[key]) < hardLimit && now.Sub(s.last[key]) < softLimit
-}
-
 func (s *DiskStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
 	// TODO Update the interface and return errors.
 	name, _ := s.Maildir.Write(msg.Contents())
@@ -391,21 +396,18 @@ func (s *DiskStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time
 
 // A `MessageStore` implementation that holds received messages in memory.
 type MemoryStore struct {
-	first    map[RecipientKey]time.Time
-	last     map[RecipientKey]time.Time
 	messages map[RecipientKey][]*ReceivedMessage
+	*messageTimes
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		make(map[RecipientKey]time.Time),
-		make(map[RecipientKey]time.Time),
 		make(map[RecipientKey][]*ReceivedMessage),
+		&messageTimes{
+			make(map[RecipientKey]time.Time),
+			make(map[RecipientKey]time.Time),
+		},
 	}
-}
-
-func (s *MemoryStore) InRange(now time.Time, key RecipientKey, softLimit time.Duration, hardLimit time.Duration) bool {
-	return now.Sub(s.first[key]) < hardLimit && now.Sub(s.last[key]) < softLimit
 }
 
 func (s *MemoryStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
