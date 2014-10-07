@@ -229,6 +229,7 @@ func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch Gr
 func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
+	// TODO Could lose data here, if Iterate cleans up before we've committed a summary to storage.
 	b.Store.Iterate(func(key RecipientKey, msgs []*ReceivedMessage, first time.Time, last time.Time) bool {
 		if !force && b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
 			return false

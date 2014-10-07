@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/mail"
 	"os"
@@ -14,7 +15,7 @@ import (
 // of messages for `MessageBuffer`.
 type MessageStore interface {
 	// Adds a message to the store, with the time it was received.
-	Add(time.Time, RecipientKey, *ReceivedMessage)
+	Add(time.Time, RecipientKey, *ReceivedMessage) error
 
 	// Computes whether the receive time a message (given its key) was within a
 	// certain duration of a time. (The first duration is for the time since
@@ -24,7 +25,7 @@ type MessageStore interface {
 
 	// Calls a function on each message in the store, removing it from the
 	// store if the function returns true.
-	Iterate(func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool)
+	Iterate(func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) error
 }
 
 // `MessageMetadata` holds data that isn't part of the RFC822 message: the
@@ -156,9 +157,11 @@ func (s *DiskStore) jsonPath(name string) string {
 	return s.Maildir.path("." + name + ".json")
 }
 
-func (s *DiskStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
-	// TODO Update the interface and return errors.
-	name, _ := s.Maildir.Write(msg.Contents())
+func (s *DiskStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) error {
+	name, err := s.Maildir.Write(msg.Contents())
+	if err != nil {
+		return err
+	}
 
 	if _, ok := s.first[key]; !ok {
 		s.first[key] = now
@@ -167,10 +170,12 @@ func (s *DiskStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
 	s.last[key] = now
 	s.messages[key] = append(s.messages[key], name)
 
-	s.writeMetadata(name, now, key, msg)
+	return s.writeMetadata(name, now, key, msg)
 }
 
-func (s *DiskStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) {
+func (s *DiskStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) error {
+	errors := make([]error, 0)
+	cleanup := make([]RecipientKey, 0)
 	for key, names := range s.messages {
 		// Read the messages from the maildir from the message names held
 		// by the store.
@@ -178,22 +183,41 @@ func (s *DiskStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time
 		msgs := make([]*ReceivedMessage, 0, len(names))
 		for _, name := range names {
 			msg, err := s.readMessage(name)
-			if err == nil {
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			} else {
 				msgs = append(msgs, msg)
 			}
 		}
 
 		if callback(key, msgs, s.first[key], s.last[key]) {
-			for _, name := range s.messages[key] {
-				// TODO Update the interface, and accumulate and return errors.
-				s.Maildir.Remove(name)
-				os.Remove(s.jsonPath(name))
-			}
-			delete(s.messages, key)
-			delete(s.first, key)
-			delete(s.last, key)
+			cleanup = append(cleanup, key)
 		}
 	}
+
+	for _, key := range cleanup {
+		for _, name := range s.messages[key] {
+			if err := s.Maildir.Remove(name); err != nil {
+				errors = append(errors, err)
+			}
+			if err := os.Remove(s.jsonPath(name)); err != nil {
+				errors = append(errors, err)
+			}
+		}
+		delete(s.messages, key)
+		delete(s.first, key)
+		delete(s.last, key)
+	}
+
+	if len(errors) > 0 {
+		buf := new(bytes.Buffer)
+		for _, err := range errors {
+			fmt.Fprintf(buf, "- %s", err.Error())
+		}
+		return fmt.Errorf("%d errors:\n%s", len(errors), buf.String())
+	}
+	return nil
 }
 
 // A `MessageStore` implementation that holds received messages in memory.
@@ -212,16 +236,17 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
-func (s *MemoryStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) {
+func (s *MemoryStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) error {
 	if _, ok := s.first[key]; !ok {
 		s.first[key] = now
 		s.messages[key] = make([]*ReceivedMessage, 0)
 	}
 	s.last[key] = now
 	s.messages[key] = append(s.messages[key], msg)
+	return nil
 }
 
-func (s *MemoryStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) {
+func (s *MemoryStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) error {
 	for key, msgs := range s.messages {
 		if callback(key, msgs, s.first[key], s.last[key]) {
 			delete(s.messages, key)
@@ -229,4 +254,5 @@ func (s *MemoryStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, ti
 			delete(s.last, key)
 		}
 	}
+	return nil
 }
