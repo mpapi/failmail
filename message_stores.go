@@ -25,7 +25,7 @@ type MessageStore interface {
 
 	// Calls a function on each message in the store, removing it from the
 	// store if the function returns true.
-	Iterate(func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) error
+	Iterate(func(RecipientKey, func() []*ReceivedMessage, time.Time, time.Time) bool) error
 }
 
 // `MessageMetadata` holds data that isn't part of the RFC822 message: the
@@ -173,25 +173,27 @@ func (s *DiskStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage) e
 	return s.writeMetadata(name, now, key, msg)
 }
 
-func (s *DiskStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) error {
+func (s *DiskStore) Iterate(callback func(RecipientKey, func() []*ReceivedMessage, time.Time, time.Time) bool) error {
 	errors := make([]error, 0)
 	cleanup := make([]RecipientKey, 0)
 	for key, names := range s.messages {
 		// Read the messages from the maildir from the message names held
 		// by the store.
-		// TODO Make this lazy; pass an object that is capable of reading them.
-		msgs := make([]*ReceivedMessage, 0, len(names))
-		for _, name := range names {
-			msg, err := s.readMessage(name)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			} else {
-				msgs = append(msgs, msg)
+		loadFunc := func() []*ReceivedMessage {
+			msgs := make([]*ReceivedMessage, 0, len(names))
+			for _, name := range names {
+				msg, err := s.readMessage(name)
+				if err != nil {
+					errors = append(errors, err)
+					continue
+				} else {
+					msgs = append(msgs, msg)
+				}
 			}
+			return msgs
 		}
 
-		if callback(key, msgs, s.first[key], s.last[key]) {
+		if callback(key, loadFunc, s.first[key], s.last[key]) {
 			cleanup = append(cleanup, key)
 		}
 	}
@@ -246,9 +248,10 @@ func (s *MemoryStore) Add(now time.Time, key RecipientKey, msg *ReceivedMessage)
 	return nil
 }
 
-func (s *MemoryStore) Iterate(callback func(RecipientKey, []*ReceivedMessage, time.Time, time.Time) bool) error {
+func (s *MemoryStore) Iterate(callback func(RecipientKey, func() []*ReceivedMessage, time.Time, time.Time) bool) error {
 	for key, msgs := range s.messages {
-		if callback(key, msgs, s.first[key], s.last[key]) {
+		loadFunc := func() []*ReceivedMessage { return msgs }
+		if callback(key, loadFunc, s.first[key], s.last[key]) {
 			delete(s.messages, key)
 			delete(s.first, key)
 			delete(s.last, key)

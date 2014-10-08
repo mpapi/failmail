@@ -230,11 +230,11 @@ func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
 	// TODO Could lose data here, if Iterate cleans up before we've committed a summary to storage.
-	b.Store.Iterate(func(key RecipientKey, msgs []*ReceivedMessage, first time.Time, last time.Time) bool {
+	b.Store.Iterate(func(key RecipientKey, loadMsgs func() []*ReceivedMessage, first time.Time, last time.Time) bool {
 		if !force && b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
 			return false
 		}
-		summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, msgs))
+		summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, loadMsgs()))
 		return true
 	})
 	return summaries
@@ -262,9 +262,9 @@ func (b *MessageBuffer) Stats() *BufferStats {
 	allMessages := 0
 	now := nowGetter()
 	var lastReceived time.Time
-	b.Store.Iterate(func(key RecipientKey, msgs []*ReceivedMessage, first time.Time, last time.Time) bool {
+	b.Store.Iterate(func(key RecipientKey, loadMsgs func() []*ReceivedMessage, first time.Time, last time.Time) bool {
 		if b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
-			allMessages += len(msgs)
+			allMessages += len(loadMsgs())
 		}
 		if lastReceived.Before(last) {
 			lastReceived = last
