@@ -38,6 +38,8 @@ type Config struct {
 
 	RelayCommand string `help:"relay messages by running this command and passing the message to stdin"`
 
+	MessageStore string `help:"use this directory as a maildir for holding received messages (instead of RAM)"`
+
 	Script  string `help:"SMTP session script to run"`
 	Version bool   `help:"show the version number and exit"`
 }
@@ -127,4 +129,16 @@ func (c *Config) SummaryRenderer() SummaryRenderer {
 		return &TemplateRenderer{tmpl}
 	}
 	return &NoRenderer{}
+}
+
+func (c *Config) Store() (MessageStore, error) {
+	if c.MessageStore != "" {
+		maildir := &Maildir{Path: c.MessageStore}
+		err := maildir.Create()
+		if err != nil {
+			return nil, err
+		}
+		return NewDiskStore(maildir)
+	}
+	return NewMemoryStore(), nil
 }

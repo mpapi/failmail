@@ -75,9 +75,14 @@ func main() {
 		defer os.Remove(config.Pidfile)
 	}
 
+	store, err := config.Store()
+	if err != nil {
+		log.Fatalf("failed to create message store: %s", err)
+	}
+
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
-	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, config.Batch(), config.Group(), config.From)
+	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, config.Batch(), config.Group(), store, config.From)
 
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.

@@ -118,7 +118,7 @@ func TestSummarize(t *testing.T) {
 }
 
 func TestMessageBuffer(t *testing.T) {
-	buf := NewMessageBuffer(5*time.Second, 9*time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), "test@example.com")
+	buf := NewMessageBuffer(5*time.Second, 9*time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), NewMemoryStore(), "test@example.com")
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
@@ -183,7 +183,7 @@ func TestMessageBuffer(t *testing.T) {
 }
 
 func TestFlushForce(t *testing.T) {
-	buf := NewMessageBuffer(5*time.Second, 9*time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), "test@example.com")
+	buf := NewMessageBuffer(5*time.Second, 9*time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), NewMemoryStore(), "test@example.com")
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()

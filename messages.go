@@ -215,14 +215,14 @@ type MessageBuffer struct {
 	Store     MessageStore
 }
 
-func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy, from string) *MessageBuffer {
+func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy, store MessageStore, from string) *MessageBuffer {
 	return &MessageBuffer{
 		softLimit,
 		hardLimit,
 		batch,
 		group,
 		from,
-		NewMemoryStore(),
+		store,
 	}
 }
 
