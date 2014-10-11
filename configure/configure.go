@@ -136,8 +136,8 @@ func normalizeFlag(field string) string {
 	return strings.ToLower(normalizeFlagPattern.ReplaceAllString(field, "$1-$2"))
 }
 
-func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandling) (*flag.FlagSet, map[string]reflect.Value, *string, *string) {
-	flagset := flag.NewFlagSet(os.Args[0], errorHandling)
+func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandling, program string) (*flag.FlagSet, map[string]reflect.Value, *string, *string) {
+	flagset := flag.NewFlagSet(program, errorHandling)
 
 	values := make(map[string]reflect.Value, 0)
 	for _, f := range fields(configWithDefaults) {
@@ -166,10 +166,14 @@ func buildFlagSet(configWithDefaults interface{}, errorHandling flag.ErrorHandli
 }
 
 func Parse(configWithDefaults interface{}, name string) (bool, error) {
-	flagset, _, configFile, _ := buildFlagSet(configWithDefaults, flag.ContinueOnError)
+	return ParseArgs(configWithDefaults, name, os.Args)
+}
+
+func ParseArgs(configWithDefaults interface{}, name string, args []string) (bool, error) {
+	flagset, _, configFile, _ := buildFlagSet(configWithDefaults, flag.ContinueOnError, args[0])
 	flagset.Usage = func() {}
 
-	err := flagset.Parse(os.Args[1:])
+	err := flagset.Parse(args[1:])
 
 	if *configFile != "" {
 		file, err := os.Open(*configFile)
@@ -184,13 +188,13 @@ func Parse(configWithDefaults interface{}, name string) (bool, error) {
 		}
 	}
 
-	flagset2, fieldValues, _, writeConfig := buildFlagSet(configWithDefaults, flag.ExitOnError)
+	flagset2, fieldValues, _, writeConfig := buildFlagSet(configWithDefaults, flag.ExitOnError, args[0])
 	flagset2.Usage = func() {
-		fmt.Fprintf(os.Stderr, "%s\n\nUsage of %s:\n", name, os.Args[0])
+		fmt.Fprintf(os.Stderr, "%s\n\nUsage of %s:\n", name, args)
 		flagset.PrintDefaults()
 	}
 
-	err = flagset2.Parse(os.Args[1:])
+	err = flagset2.Parse(args[1:])
 	if err != nil {
 		return false, err
 	}
