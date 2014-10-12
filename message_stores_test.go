@@ -42,4 +42,25 @@ func TestDiskStore(t *testing.T) {
 	} else if count := len(msgs); count != 0 {
 		t.Errorf("expected empty maildir, found %d entries", count)
 	}
+
+	// Add the message back.
+	if err := ds.Add(now, RecipientKey{"test", "test@example.com"}, msg); err != nil {
+		t.Errorf("failed to add message to store: %s", err)
+	}
+
+	// Make sure it was written.
+	if msgs, err := maildir.List(); err != nil {
+		t.Errorf("error on maildir.List(): %s", err)
+	} else if count := len(msgs); count != 2 {
+		t.Errorf("expected 2 entries in maildir, found %d", count)
+	}
+
+	newDs, err := NewDiskStore(maildir)
+	if err != nil {
+		t.Errorf("unexpected error creating new disk store: %s", err)
+	}
+
+	if count := len(newDs.messages); count != 1 {
+		t.Errorf("expected 1 message restored in new disk store, found %d", count)
+	}
 }
