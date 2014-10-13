@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/hut8labs/failmail/parse"
 	"net/mail"
-	"os"
 	"regexp"
 	"strings"
 )
@@ -99,7 +98,7 @@ func (s *Session) Start(auth Auth, hasTLS bool) Response {
 }
 
 func (s *Session) initHostname() {
-	hostname, err := os.Hostname()
+	hostname, err := hostGetter()
 	if err != nil {
 		hostname = "localhost"
 	}
