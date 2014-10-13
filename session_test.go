@@ -271,3 +271,20 @@ func TestAuthRequired(t *testing.T) {
 		t.Errorf("VRFY with auth required should get a 530 response")
 	}
 }
+
+func TestAuthBadMethod(t *testing.T) {
+	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+
+	parser := SMTPParser()
+
+	s := new(Session)
+	s.Start(auth, false)
+
+	if resp := s.Advance(parser("HELO test.example.com\r\n")); resp.Code != 250 {
+		t.Errorf("HELO should get a 250 response")
+	}
+
+	if resp := s.Advance(parser("AUTH BADMETHOD\r\n")); resp.Code != 504 {
+		t.Errorf("AUTH with a bad method should get a 504 response")
+	}
+}
