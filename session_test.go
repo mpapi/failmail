@@ -288,3 +288,20 @@ func TestAuthBadMethod(t *testing.T) {
 		t.Errorf("AUTH with a bad method should get a 504 response")
 	}
 }
+
+func TestAuthBadCredentials(t *testing.T) {
+	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+
+	parser := SMTPParser()
+
+	s := new(Session)
+	s.Start(auth, false)
+
+	if resp := s.Advance(parser("HELO test.example.com\r\n")); resp.Code != 250 {
+		t.Errorf("HELO should get a 250 response")
+	}
+
+	if resp := s.Advance(parser("AUTH PLAIN notbase64\r\n")); resp.Code != 501 {
+		t.Errorf("AUTH with a non-base64 payload should get a 501 response")
+	}
+}
