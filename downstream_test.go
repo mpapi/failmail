@@ -30,6 +30,29 @@ func (b BadClient) Close() error {
 	return nil
 }
 
+type BadServerSocket struct {
+}
+
+func (b *BadServerSocket) Accept() (net.Conn, error) {
+	return nil, fmt.Errorf("bad accept")
+}
+
+func (b *BadServerSocket) Close() error {
+	return fmt.Errorf("bad close")
+}
+
+func (b *BadServerSocket) Addr() net.Addr {
+	return nil
+}
+
+func (b *BadServerSocket) Fd() uintptr {
+	return 0
+}
+
+func (b *BadServerSocket) String() string {
+	return "bad"
+}
+
 func TestListener(t *testing.T) {
 	socket, err := NewTCPServerSocket("localhost:40025")
 	if err != nil {
@@ -122,6 +145,29 @@ func TestListenerWithBadClient(t *testing.T) {
 	l.handleConnection(BadClient{}, received)
 	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {
 		t.Errorf("bad client didn't trigger failure in handleConnection(): %#v", msg)
+	}
+}
+
+func TestListenerWithBadServer(t *testing.T) {
+	buf := new(bytes.Buffer)
+	socket := new(BadServerSocket)
+	l := &Listener{log.New(buf, "", log.LstdFlags), socket, nil, nil, 0, 0}
+
+	received := make(chan *ReceivedMessage, 1)
+	done := make(chan bool, 1)
+	go func() {
+		l.Listen(received, NewReloader(), 1*time.Millisecond)
+		done <- true
+	}()
+
+	select {
+	case <-time.Tick(1 * time.Second):
+		t.Errorf("timed out")
+	case <-done:
+	}
+
+	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "error accepting connection") {
+		t.Errorf("bad socket Accept() didn't trigger failure in Listen(): %#v", msg)
 	}
 }
 
