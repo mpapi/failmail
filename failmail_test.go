@@ -2,6 +2,9 @@ package main
 
 import (
 	"errors"
+	"io/ioutil"
+	"os"
+	"path"
 	"testing"
 	"time"
 )
@@ -118,4 +121,25 @@ func TestSendUpstreamFailed(t *testing.T) {
 		t.Fatalf("timed out")
 	case <-done:
 	}
+}
+
+func TestWritePidfile(t *testing.T) {
+	testDir, cleanup := makeTestDir(t)
+	defer cleanup()
+
+	pidfile := path.Join(testDir, "test.pid")
+	writePidfile(pidfile)
+	if _, err := os.Stat(pidfile); err != nil && os.IsNotExist(err) {
+		t.Errorf("no pidfile found at %s", pidfile)
+	} else if err != nil && !os.IsNotExist(err) {
+		t.Errorf("unexpected error looking for pidfile: %s", err)
+	}
+}
+
+func makeTestDir(t *testing.T) (string, func()) {
+	tmp, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("couldn't create temp dir: %s", err)
+	}
+	return tmp, func() { os.RemoveAll(tmp) }
 }
