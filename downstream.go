@@ -175,7 +175,10 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 	writer := bufio.NewWriter(conn)
 
 	session := new(Session)
-	session.Start(l.Auth, l.TLSConfig != nil).WriteTo(writer)
+	if err := session.Start(l.Auth, l.TLSConfig != nil).WriteTo(writer); err != nil {
+		l.Printf("error writing to client: %s", err)
+		return
+	}
 
 	for {
 		resp, err := session.ReadCommand(reader)
@@ -184,21 +187,30 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 			break
 		}
 
-		resp.WriteTo(writer)
+		if err := resp.WriteTo(writer); err != nil {
+			l.Printf("error writing to client after reading command: %s", err)
+			break
+		}
 
 		switch {
 		case resp.IsClose():
 			return
 		case resp.NeedsData():
 			resp, msg := session.ReadData(reader)
-			resp.WriteTo(writer)
+			if err := resp.WriteTo(writer); err != nil {
+				l.Printf("error writing to client after reading data: %s", err)
+				break
+			}
 			if msg != nil {
 				l.Printf("received message with subject %#v", msg.Parsed.Header.Get("Subject"))
 				received <- msg
 			}
 		case resp.NeedsAuthResponse():
 			resp := session.ReadAuthResponse(reader)
-			resp.WriteTo(writer)
+			if err := resp.WriteTo(writer); err != nil {
+				l.Printf("error writing to client after reading auth: %s", err)
+				break
+			}
 		case resp.StartsTLS():
 			netConn, ok := conn.(net.Conn)
 			if !ok {

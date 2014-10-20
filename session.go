@@ -34,22 +34,25 @@ func (r Response) StartsTLS() bool {
 	return r.Text == "Ready to switch to TLS"
 }
 
-// TODO return error
-func (r Response) WriteTo(writer *bufio.Writer) {
+func (r Response) WriteTo(writer *bufio.Writer) error {
 	text := strings.TrimSpace(r.Text)
 	lines := strings.Split(text, "\r\n")
 	if len(lines) > 1 {
 		for index, line := range lines {
 			if index < len(lines)-1 {
-				writer.WriteString(fmt.Sprintf("%d-%s\r\n", r.Code, line))
+				if _, err := writer.WriteString(fmt.Sprintf("%d-%s\r\n", r.Code, line)); err != nil {
+					return err
+				}
 			} else {
-				writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, line))
+				if _, err := writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, line)); err != nil {
+					return err
+				}
 			}
 		}
-	} else {
-		writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, r.Text))
+	} else if _, err := writer.WriteString(fmt.Sprintf("%d %s\r\n", r.Code, r.Text)); err != nil {
+		return err
 	}
-	writer.Flush()
+	return writer.Flush()
 }
 
 type stringReader interface {
