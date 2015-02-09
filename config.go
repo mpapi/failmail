@@ -32,7 +32,6 @@ type Config struct {
 
 	// Options for relaying outgoing messages.
 	RelayAddr     string `help:"upstream relay server address"`
-	RelayAll      bool   `help:"relay all messages to the upstream server"`
 	RelayUser     string `help:"username for auth to relay server"`
 	RelayPassword string `help:"password for auth to relay server"`
 	FailDir       string `help:"write failed sends to this maildir"`

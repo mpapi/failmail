@@ -104,7 +104,6 @@ func main() {
 		Renderer: config.SummaryRenderer(),
 		Buffer:   buffer,
 		Reloader: reloader,
-		RelayAll: config.RelayAll,
 	}
 	go relay.Run(received, done, outgoing)
 
@@ -131,7 +130,6 @@ type MessageRelay struct {
 	Renderer SummaryRenderer
 	Buffer   *MessageBuffer
 	Reloader *Reloader
-	RelayAll bool
 }
 
 func (r *MessageRelay) Run(received <-chan *ReceivedMessage, done <-chan TerminationRequest, outgoing chan<- OutgoingMessage) {
@@ -145,9 +143,6 @@ func (r *MessageRelay) Run(received <-chan *ReceivedMessage, done <-chan Termina
 			}
 		case msg := <-received:
 			r.Buffer.Add(msg)
-			if r.RelayAll {
-				outgoing <- msg
-			}
 		case req := <-done:
 			if req == Reload {
 				r.Reloader.RequestReload()
