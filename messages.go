@@ -214,17 +214,6 @@ type MessageBuffer struct {
 	Store     MessageStore
 }
 
-func NewMessageBuffer(softLimit time.Duration, hardLimit time.Duration, batch GroupBy, group GroupBy, store MessageStore, from string) *MessageBuffer {
-	return &MessageBuffer{
-		softLimit,
-		hardLimit,
-		batch,
-		group,
-		from,
-		store,
-	}
-}
-
 func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()

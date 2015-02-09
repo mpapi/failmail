@@ -67,7 +67,14 @@ func main() {
 
 	// A `MessageBuffer` collects incoming messages and decides how to batch
 	// them up and when to relay them to an upstream SMTP server.
-	buffer := NewMessageBuffer(config.WaitPeriod, config.MaxWait, config.Batch(), config.Group(), store, config.From)
+	buffer := &MessageBuffer{
+		SoftLimit: config.WaitPeriod,
+		HardLimit: config.MaxWait,
+		Batch:     config.Batch(),
+		Group:     config.Group(),
+		From:      config.From,
+		Store:     store,
+	}
 
 	// An upstream SMTP server is used to send the summarized messages flushed
 	// from the MessageBuffer.
