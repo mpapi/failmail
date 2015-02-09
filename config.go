@@ -145,3 +145,25 @@ func (c *Config) Store() (MessageStore, error) {
 		return NewDiskStore(maildir)
 	}
 }
+
+func (c *Config) Listener() (*Listener, error) {
+	auth, err := c.Auth()
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig, err := c.TLSConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// The listener talks SMTP to clients, and puts any messages they send onto
+	// the `received` channel.
+	socket, err := c.Socket()
+	if err != nil {
+		return nil, err
+	}
+
+	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
+	return listener, nil
+}

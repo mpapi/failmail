@@ -48,26 +48,12 @@ func main() {
 	done := make(chan TerminationRequest, 1)
 	go HandleSignals(done)
 
-	auth, err := config.Auth()
+	listener, err := config.Listener()
 	if err != nil {
-		log.Fatalf("failed to parse auth credentials: %s", err)
-	}
-
-	tlsConfig, err := config.TLSConfig()
-	if err != nil {
-		log.Fatalf("failed to configure TLS: %s", err)
-	}
-
-	// The listener talks SMTP to clients, and puts any messages they send onto
-	// the `received` channel.
-	socket, err := config.Socket()
-	if err != nil {
-		log.Fatalf("failed to create socket for listener: %s", err)
+		log.Fatalf("failed to create listener: %s", err)
 	}
 
 	reloader := NewReloader()
-
-	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
 	go listener.Listen(received, reloader, config.ShutdownTimeout)
 
 	if config.Pidfile != "" {
