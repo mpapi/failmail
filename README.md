@@ -127,10 +127,6 @@ The settings are described below:
 
     relay all messages to the upstream server
 
-* `--relay-command` (default: none)
-
-    relay messages by running this command and passing the message to stdin
-
 * `--relay-password` (default: none)
 
     password for auth to relay server

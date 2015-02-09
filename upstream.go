@@ -3,12 +3,10 @@
 package main
 
 import (
-	"bytes"
 	"io"
 	"log"
 	"net"
 	"net/smtp"
-	"os/exec"
 )
 
 // `Upstream` is the interface that wraps the method to send an
@@ -62,16 +60,6 @@ type MaildirUpstream struct {
 func (u *MaildirUpstream) Send(m OutgoingMessage) error {
 	u.Maildir.Write(m.Contents())
 	return nil
-}
-
-type ExecUpstream struct {
-	Command string
-}
-
-func (u *ExecUpstream) Send(m OutgoingMessage) error {
-	cmd := exec.Command("sh", "-c", u.Command)
-	cmd.Stdin = bytes.NewBuffer(m.Contents())
-	return cmd.Run()
 }
 
 type MultiUpstream struct {

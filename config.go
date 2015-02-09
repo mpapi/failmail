@@ -33,8 +33,6 @@ type Config struct {
 	TlsCert       string `help:"PEM certificate file for TLS"`
 	TlsKey        string `help:"PEM key file for TLS"`
 
-	RelayCommand string `help:"relay messages by running this command and passing the message to stdin"`
-
 	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
 	MessageStore string `help:"use this directory as a maildir for holding received messages"`
 
@@ -92,10 +90,6 @@ func (c *Config) Upstream() (Upstream, error) {
 			return upstream, err
 		}
 		upstream = NewMultiUpstream(&MaildirUpstream{allMaildir}, upstream)
-	}
-
-	if c.RelayCommand != "" {
-		upstream = NewMultiUpstream(&ExecUpstream{c.RelayCommand}, upstream)
 	}
 	return upstream, nil
 }
