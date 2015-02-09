@@ -98,13 +98,6 @@ func main() {
 		log.Fatalf("failed to create maildir for failed messages at %s: %s", config.FailDir, err)
 	}
 
-	if config.Script != "" {
-		runner, err := runScript(config.Script)
-		if err != nil {
-			log.Fatalf("failed to run script file %s: %s", config.Script, err)
-		}
-		go runner(done)
-	}
 	go ListenHTTP(config.BindHTTP, buffer)
 
 	relay := &MessageRelay{

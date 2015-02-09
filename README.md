@@ -151,10 +151,6 @@ The settings are described below:
 
     username for auth to relay server
 
-* `--script` (default: none)
-
-    SMTP session script to run
-
 * `--shutdown-timeout` (default: `5s`)
 
     wait this long for open connections to finish when shutting down or reloading

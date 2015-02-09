@@ -41,7 +41,6 @@ type Config struct {
 	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
 	MessageStore string `help:"use this directory as a maildir for holding received messages"`
 
-	Script  string `help:"SMTP session script to run"`
 	Version bool   `help:"show the version number and exit"`
 }
 
