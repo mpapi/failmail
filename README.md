@@ -119,18 +119,6 @@ The settings are described below:
 
     write a pidfile to this path
 
-* `--rate-check` (default: `1m0s`)
-
-    how often to check whether rate limit was exceeded
-
-* `--rate-limit` (default: `0`)
-
-    alert if this many emails are received within a window
-
-* `--rate-window` (default: `5`)
-
-    the size of the rate limit window, in check intervals
-
 * `--relay-addr` (default: `"localhost:25"`)
 
     relay server address

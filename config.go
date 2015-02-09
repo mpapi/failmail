@@ -18,9 +18,6 @@ type Config struct {
 	From       string        `help:"from address"`
 	FailDir    string        `help:"write failed sends to this maildir"`
 	AllDir     string        `help:"write all sends to this maildir"`
-	RateLimit  int           `help:"alert if this many emails are received within a window"`
-	RateCheck  time.Duration `help:"how often to check whether rate limit was exceeded"`
-	RateWindow int           `help:"the size of the rate limit window, in check intervals"`
 	BatchExpr  string        `help:"an expression used to determine how messages are batched into summary emails"`
 	GroupExpr  string        `help:"an expression used to determine how messages are grouped within summary emails"`
 	BindHTTP   string        `help:"local bind address for the HTTP server"`
@@ -41,7 +38,7 @@ type Config struct {
 	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
 	MessageStore string `help:"use this directory as a maildir for holding received messages"`
 
-	Version bool   `help:"show the version number and exit"`
+	Version bool `help:"show the version number and exit"`
 }
 
 func Defaults() *Config {
@@ -52,8 +49,6 @@ func Defaults() *Config {
 		MaxWait:         5 * time.Minute,
 		From:            DefaultFromAddress("failmail"),
 		FailDir:         "failed",
-		RateCheck:       1 * time.Minute,
-		RateWindow:      5,
 		BatchExpr:       `{{.Header.Get "X-Failmail-Split"}}`,
 		GroupExpr:       `{{.Header.Get "Subject"}}`,
 		BindHTTP:        "localhost:8025",

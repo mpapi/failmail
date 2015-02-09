@@ -101,11 +101,10 @@ func main() {
 	go ListenHTTP(config.BindHTTP, buffer)
 
 	relay := &MessageRelay{
-		Renderer:    config.SummaryRenderer(),
-		Buffer:      buffer,
-		RateCounter: NewRateCounter(config.RateLimit, config.RateWindow),
-		Reloader:    reloader,
-		RelayAll:    config.RelayAll,
+		Renderer: config.SummaryRenderer(),
+		Buffer:   buffer,
+		Reloader: reloader,
+		RelayAll: config.RelayAll,
 	}
 	go relay.Run(received, done, outgoing)
 
@@ -130,19 +129,13 @@ func sendUpstream(outgoing <-chan OutgoingMessage, upstream Upstream, failedMail
 
 type MessageRelay struct {
 	Renderer SummaryRenderer
-
-	Buffer      *MessageBuffer
-	RateCounter *RateCounter
-	RateCheck   time.Duration
-
+	Buffer   *MessageBuffer
 	Reloader *Reloader
-
 	RelayAll bool
 }
 
 func (r *MessageRelay) Run(received <-chan *ReceivedMessage, done <-chan TerminationRequest, outgoing chan<- OutgoingMessage) {
 	tick := time.Tick(1 * time.Second)
-	rateCheckTick := time.Tick(r.RateCheck)
 
 	for {
 		select {
@@ -150,16 +143,8 @@ func (r *MessageRelay) Run(received <-chan *ReceivedMessage, done <-chan Termina
 			for _, summary := range r.Buffer.Flush(false) {
 				outgoing <- r.Renderer.Render(summary)
 			}
-		case <-rateCheckTick:
-			// Slide the window, and see if this interval trips the alert.
-			exceeded, count := r.RateCounter.CheckAndAdvance()
-			if exceeded {
-				// TODO actually send an email here, eventually
-				log.Printf("rate limit check exceeded: %d messages", count)
-			}
 		case msg := <-received:
 			r.Buffer.Add(msg)
-			r.RateCounter.Add(1)
 			if r.RelayAll {
 				outgoing <- msg
 			}

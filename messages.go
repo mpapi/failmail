@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"container/ring"
 	"fmt"
 	"io/ioutil"
 	"net/mail"
@@ -284,42 +283,6 @@ type BufferStats struct {
 	ActiveBatches  int
 	ActiveMessages int
 	LastReceived   time.Time
-}
-
-// Tracks the number of arriving messages in a sliding window, to see whether
-// they exceed some limit.
-type RateCounter struct {
-	Limit  int
-	counts *ring.Ring
-}
-
-func NewRateCounter(limit int, intervals int) *RateCounter {
-	return &RateCounter{limit, ring.New(intervals)}
-}
-
-// Tells the `RateCounter` that some number of messages has just arrived.
-func (r *RateCounter) Add(messages int) {
-	if r.counts.Value == nil {
-		r.counts.Value = messages
-	} else {
-		r.counts.Value = int(r.counts.Value.(int) + messages)
-	}
-}
-
-// Determines how many messages were received during the window and returns a
-// boolean for whether the total exceeds the limit, as well as the total
-// itself. Also slides the window forward, forgetting about the count for the
-// oldest interval and preparing to count a new interval's worth of messages.
-func (r *RateCounter) CheckAndAdvance() (bool, int) {
-	var sum int
-	r.counts.Do(func(val interface{}) {
-		if val != nil {
-			sum += val.(int)
-		}
-	})
-	r.counts = r.counts.Next()
-	r.counts.Value = 0
-	return (r.Limit > 0 && sum >= r.Limit), sum
 }
 
 func Plural(count int, singular string, plural string) string {
