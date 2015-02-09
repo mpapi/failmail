@@ -38,7 +38,8 @@ type Config struct {
 
 	RelayCommand string `help:"relay messages by running this command and passing the message to stdin"`
 
-	MessageStore string `help:"use this directory as a maildir for holding received messages (instead of RAM)"`
+	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
+	MessageStore string `help:"use this directory as a maildir for holding received messages"`
 
 	Script  string `help:"SMTP session script to run"`
 	Version bool   `help:"show the version number and exit"`
@@ -58,6 +59,7 @@ func Defaults() *Config {
 		GroupExpr:       `{{.Header.Get "Subject"}}`,
 		BindHTTP:        "localhost:8025",
 		ShutdownTimeout: 5 * time.Second,
+		MessageStore:    "incoming",
 	}
 }
 
@@ -132,7 +134,12 @@ func (c *Config) SummaryRenderer() SummaryRenderer {
 }
 
 func (c *Config) Store() (MessageStore, error) {
-	if c.MessageStore != "" {
+	switch {
+	case c.MemoryStore:
+		return NewMemoryStore(), nil
+	case c.MessageStore == "":
+		return nil, fmt.Errorf("must have either a memory store or a disk-backed store")
+	default:
 		maildir := &Maildir{Path: c.MessageStore}
 		err := maildir.Create()
 		if err != nil {
@@ -140,5 +147,4 @@ func (c *Config) Store() (MessageStore, error) {
 		}
 		return NewDiskStore(maildir)
 	}
-	return NewMemoryStore(), nil
 }
