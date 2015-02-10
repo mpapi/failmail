@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/mail"
@@ -114,6 +115,76 @@ func TestMaildirUpstream(t *testing.T) {
 		if subject := sent.Header.Get("Subject"); subject != "test" {
 			t.Errorf("unexpected subject: %s", subject)
 		}
+	}
+}
+
+func TestSender(t *testing.T) {
+	failedMaildir, cleanup := makeTestMaildir(t)
+	defer cleanup()
+
+	upstream := &TestUpstream{make([]OutgoingMessage, 0), nil}
+	outgoing := make(chan OutgoingMessage, 0)
+
+	done := make(chan bool, 0)
+	go func() {
+		sender := &Sender{upstream, failedMaildir}
+		sender.Run(outgoing)
+		done <- true
+	}()
+
+	outgoing <- &message{"test", []string{"test"}, []byte("test")}
+	close(outgoing)
+
+	if count := len(upstream.Sends); count != 1 {
+		t.Errorf("expected one successful upstream send, got %d", count)
+	}
+
+	msgs, err := failedMaildir.List()
+	if err != nil {
+		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
+	} else if count := len(msgs); count != 0 {
+		t.Errorf("expected no messages in failed maildir, got %d", count)
+	}
+
+	select {
+	case <-time.Tick(100 * time.Millisecond):
+		t.Fatalf("timed out")
+	case <-done:
+	}
+}
+
+func TestSenderFailed(t *testing.T) {
+	failedMaildir, cleanup := makeTestMaildir(t)
+	defer cleanup()
+
+	upstream := &TestUpstream{make([]OutgoingMessage, 0), errors.New("fail")}
+	outgoing := make(chan OutgoingMessage, 0)
+
+	done := make(chan bool, 0)
+	go func() {
+		sender := &Sender{upstream, failedMaildir}
+		sender.Run(outgoing)
+		done <- true
+	}()
+
+	outgoing <- &message{"test", []string{"test"}, []byte("test")}
+	close(outgoing)
+
+	if count := len(upstream.Sends); count != 0 {
+		t.Errorf("expected one successful upstream send, got %d", count)
+	}
+
+	msgs, err := failedMaildir.List()
+	if err != nil {
+		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
+	} else if count := len(msgs); count != 1 {
+		t.Errorf("expected no messages in failed maildir, got %d", count)
+	}
+
+	select {
+	case <-time.Tick(100 * time.Millisecond):
+		t.Fatalf("timed out")
+	case <-done:
 	}
 }
 

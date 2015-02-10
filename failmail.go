@@ -99,7 +99,8 @@ func main() {
 	}
 	go relay.Run(received, done, outgoing)
 
-	sendUpstream(outgoing, upstream, failedMaildir)
+	sender := &Sender{upstream, failedMaildir}
+	sender.Run(outgoing)
 
 	if err := reloader.ReloadIfNecessary(); err != nil {
 		log.Fatalf("failed to reload: %s", err)

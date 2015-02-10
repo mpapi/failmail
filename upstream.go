@@ -78,3 +78,20 @@ func (u *MultiUpstream) Send(m OutgoingMessage) error {
 	}
 	return nil
 }
+
+type Sender struct {
+	Upstream      Upstream
+	FailedMaildir *Maildir
+}
+
+func (s *Sender) Run(outgoing <-chan OutgoingMessage) {
+	for msg := range outgoing {
+		if sendErr := s.Upstream.Send(msg); sendErr != nil {
+			log.Printf("couldn't send message: %s", sendErr)
+			if _, saveErr := s.FailedMaildir.Write([]byte(msg.Contents())); saveErr != nil {
+				log.Printf("couldn't save message: %s", saveErr)
+			}
+		}
+	}
+	log.Printf("done sending")
+}
