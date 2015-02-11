@@ -112,7 +112,7 @@ func WaitWithTimeout(waitGroup *sync.WaitGroup, timeout time.Duration) bool {
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
-func (l *Listener) Listen(received chan<- *ReceivedMessage, done <-chan TerminationRequest, reloader *Reloader, shutdownTimeout time.Duration) {
+func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan TerminationRequest, reloader *Reloader, shutdownTimeout time.Duration) {
 	l.Printf("listening: %s", l.Socket)
 	waitGroup := new(sync.WaitGroup)
 
@@ -186,7 +186,7 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage, done <-chan Terminat
 // describe a message, `Session` is used to keep track of the progress building
 // a message. When a message has been fully communicated by a downstream
 // client, it's put on the `received` channel for later batching/summarizing.
-func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *ReceivedMessage) {
+func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *StorageRequest) {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
@@ -215,13 +215,22 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *Re
 			return
 		case resp.NeedsData():
 			resp, msg := session.ReadData(reader)
-			if err := resp.WriteTo(writer); err != nil {
-				l.Printf("error writing to client after reading data: %s", err)
-				break
-			}
 			if msg != nil {
 				l.Printf("received message with subject %#v", msg.Parsed.Header.Get("Subject"))
-				received <- msg
+				errors := make(chan error, 0)
+				received <- &StorageRequest{msg, errors}
+				if err := <-errors; err != nil {
+					errorResp := Response{451, err.Error()}
+					if err := errorResp.WriteTo(writer); err != nil {
+						l.Printf("error writing to client after storage failure: %s", err)
+						break
+					}
+				} else {
+					if err := resp.WriteTo(writer); err != nil {
+						l.Printf("error writing to client after reading data: %s", err)
+						break
+					}
+				}
 			}
 		case resp.NeedsAuthResponse():
 			resp := session.ReadAuthResponse(reader)

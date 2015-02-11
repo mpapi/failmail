@@ -224,9 +224,15 @@ type MessageWriter struct {
 	Store MessageStore
 }
 
-func (w *MessageWriter) Run(received <-chan *ReceivedMessage) error {
-	for msg := range received {
-		w.Store.Add(nowGetter(), msg)
+func (w *MessageWriter) Run(received <-chan *StorageRequest) error {
+	for req := range received {
+		_, err := w.Store.Add(nowGetter(), req.Message)
+		req.StorageErrors <- err
 	}
 	return nil
+}
+
+type StorageRequest struct {
+	Message       *ReceivedMessage
+	StorageErrors chan<- error
 }

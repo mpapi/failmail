@@ -60,7 +60,7 @@ func main() {
 
 		// A channel for incoming messages. The listener sends on the channel, and
 		// receives are added to a MessageBuffer in the channel consumer below.
-		received := make(chan *ReceivedMessage, 64)
+		received := make(chan *StorageRequest, 64)
 
 		done := make(chan TerminationRequest, 1)
 		signalListeners = append(signalListeners, done)
