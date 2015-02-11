@@ -73,7 +73,7 @@ func TestReceivedMessageOutgoing(t *testing.T) {
 func TestCompact(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
-	uniques := Compact(GroupByExpr("batch", `{{.Header.Get "Subject"}}`), []*ReceivedMessage{msg1, msg2})
+	uniques := Compact(GroupByExpr("batch", `{{.Header.Get "Subject"}}`), makeStoredMessages(msg1, msg2))
 	if count := len(uniques); count != 1 {
 		t.Errorf("expected one unique message from Compact(), got %d", count)
 	}
@@ -101,7 +101,7 @@ func TestSummarize(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test 2\r\n\r\ntest body 2\r\n")
 
-	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
+	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
 
 	if summarized.From != "failmail@example.com" {
 		t.Errorf("unexpected from address from Summarize(): %s", summarized.From)
@@ -125,6 +125,7 @@ func makeMessageBuffer() *MessageBuffer {
 		Group:     GroupByExpr("group", `{{.Header.Get "Subject"}}`),
 		From:      "test@example.com",
 		Store:     NewMemoryStore(),
+		Renderer:  &NoRenderer{},
 		batches:   NewBatches(),
 	}
 }
@@ -134,8 +135,20 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
 	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %v", summaries)
+
+	outgoing := make(chan *SendRequest, 64)
+
+	summaries := make([]*SummaryMessage, 0)
+	go func() {
+		for req := range outgoing {
+			summaries = append(summaries, req.Message.(*SummaryMessage))
+			req.SendErrors <- nil
+		}
+	}()
+
+	buf.Flush(outgoing, false)
+	if count := len(summaries); count != 0 {
+		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	} else if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
@@ -143,8 +156,9 @@ func TestMessageBuffer(t *testing.T) {
 
 	unpatch = patchTime(time.Unix(1393650005, 0))
 	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 2"))
-	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %v", summaries)
+	buf.Flush(outgoing, false)
+	if count := len(summaries); count != 0 {
+		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	} else if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	} else if count := buf.Stats().ActiveMessages; count != 2 {
@@ -153,26 +167,29 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650008, 0))
-	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %v", summaries)
+	buf.Flush(outgoing, false)
+	if count := len(summaries); count != 0 {
+		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650009, 0))
-	summaries := buf.Flush(false)
-	if len(summaries) != 1 {
-		t.Errorf("unexpected summaries from flush: %v", summaries)
+	buf.Flush(outgoing, false)
+	if count := len(summaries); count != 1 {
+		t.Errorf("unexpected summaries from flush: %d != 1", count)
 	}
 	if count := buf.Stats().ActiveBatches; count != 0 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
-	if count := len(summaries[0].ReceivedMessages); count != 2 {
-		t.Errorf("unexpected summary received message count: %d", count)
+
+	summary := summaries[0]
+	if count := len(summary.StoredMessages); count != 2 {
+		t.Errorf("unexpected summary stored message count: %d", count)
 	}
-	if count := len(summaries[0].UniqueMessages); count != 1 {
+	if count := len(summary.UniqueMessages); count != 1 {
 		t.Errorf("unexpected summary received unique message count: %d", count)
 	}
-	if subject := summaries[0].Subject; subject != "[failmail] 2 instances: test" {
+	if subject := summary.Subject; subject != "[failmail] 2 instances: test" {
 		t.Errorf("unexpected summary subject: %s", subject)
 	}
 
@@ -188,23 +205,36 @@ func TestMessageBuffer(t *testing.T) {
 
 func TestFlushForce(t *testing.T) {
 	buf := makeMessageBuffer()
+	outgoing := make(chan *SendRequest, 64)
+
+	summaries := make([]*SummaryMessage, 0)
+	go func() {
+		for req := range outgoing {
+			summaries = append(summaries, req.Message.(*SummaryMessage))
+			req.SendErrors <- nil
+		}
+	}()
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
 	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %v", summaries)
+	buf.Flush(outgoing, false)
+	if count := len(summaries); count != 0 {
+		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	} else if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650004, 0))
-	if summaries := buf.Flush(false); len(summaries) != 0 {
-		t.Errorf("unexpected summaries from flush: %v", summaries)
+	buf.Flush(outgoing, false)
+	if count := len(summaries); count != 0 {
+		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	}
-	if summaries := buf.Flush(true); len(summaries) != 1 {
-		t.Errorf("unexpected summaries from flush: expected 1, got %d", len(summaries))
+
+	buf.Flush(outgoing, true)
+	if count := len(summaries); count != 1 {
+		t.Errorf("unexpected summaries from flush: %d != 1", count)
 	}
 	unpatch()
 }
@@ -256,7 +286,7 @@ func TestTemplateRenderer(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
 
-	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", []*ReceivedMessage{msg1, msg2})
+	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
 
 	templ := template.Must(template.New("summary").Parse("{{ range .UniqueMessages }}{{ .Count }} instances of {{ .Subject }}{{ end }}\n"))
 	renderer := &TemplateRenderer{templ}
@@ -264,4 +294,12 @@ func TestTemplateRenderer(t *testing.T) {
 	if contents := string(rendered.Contents()); contents != "2 instances of test\r\n" {
 		t.Errorf("unexpected rendered message: %s", contents)
 	}
+}
+
+func makeStoredMessages(msgs ...*ReceivedMessage) []*StoredMessage {
+	stored := make([]*StoredMessage, 0, len(msgs))
+	for i, msg := range msgs {
+		stored = append(stored, &StoredMessage{MessageId(i), nowGetter(), msg})
+	}
+	return stored
 }

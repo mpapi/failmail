@@ -91,6 +91,7 @@ func main() {
 			Group:     config.Group(),
 			From:      config.From,
 			Store:     store,
+			Renderer:  config.SummaryRenderer(),
 			batches:   NewBatches(),
 		}
 
@@ -111,16 +112,15 @@ func main() {
 		go ListenHTTP(config.BindHTTP, buffer)
 
 		// A channel for outgoing messages.
-		outgoing := make(chan OutgoingMessage, 64)
+		outgoing := make(chan *SendRequest, 64)
 
 		done := make(chan TerminationRequest, 1)
 		signalListeners = append(signalListeners, done)
 
-		summarizer := &Summarizer{buffer, config.SummaryRenderer()}
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			summarizer.Run(outgoing, done)
+			buffer.Run(outgoing, done)
 			log.Printf("summarizer: done")
 		}()
 

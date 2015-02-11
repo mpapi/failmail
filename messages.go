@@ -80,11 +80,11 @@ type UniqueMessage struct {
 // `Compact` returns a `UniqueMessage` for each distinct key among the received
 // messages, using the regular expression `sanitize` to create a representative
 // template body for the `UniqueMessage`.
-func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
+func Compact(group GroupBy, stored []*StoredMessage) []*UniqueMessage {
 	uniques := make(map[string]*UniqueMessage)
 	result := make([]*UniqueMessage, 0)
-	for _, msg := range received {
-		key, _ := group(msg)
+	for _, msg := range stored {
+		key, _ := group(msg.ReceivedMessage)
 
 		if _, ok := uniques[key]; !ok {
 			unique := &UniqueMessage{Template: key}
@@ -111,12 +111,12 @@ func Compact(group GroupBy, received []*ReceivedMessage) []*UniqueMessage {
 // A `SummaryMessage` is the result of rolling together several
 // `UniqueMessage`s.
 type SummaryMessage struct {
-	From             string
-	To               []string
-	Subject          string
-	Date             time.Time
-	ReceivedMessages []*ReceivedMessage
-	UniqueMessages   []*UniqueMessage
+	From           string
+	To             []string
+	Subject        string
+	Date           time.Time
+	StoredMessages []*StoredMessage
+	UniqueMessages []*UniqueMessage
 }
 
 func (s *SummaryMessage) Sender() string {
@@ -185,15 +185,15 @@ func (s *SummaryMessage) Contents() []byte {
 	return buf.Bytes()
 }
 
-func Summarize(group GroupBy, from string, to string, received []*ReceivedMessage) *SummaryMessage {
-	uniques := Compact(group, received)
+func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) *SummaryMessage {
+	uniques := Compact(group, stored)
 	result := &SummaryMessage{}
 
 	result.From = from
 	result.To = []string{to}
 	result.Date = nowGetter()
 
-	instances := Plural(len(received), "instance", "instances")
+	instances := Plural(len(stored), "instance", "instances")
 	if len(uniques) == 1 {
 		result.Subject = fmt.Sprintf("[failmail] %s: %s", instances, uniques[0].Subject)
 	} else {
@@ -201,7 +201,7 @@ func Summarize(group GroupBy, from string, to string, received []*ReceivedMessag
 		result.Subject = fmt.Sprintf("[failmail] %s of %s", instances, messages)
 	}
 
-	result.ReceivedMessages = received
+	result.StoredMessages = stored
 	result.UniqueMessages = uniques
 	return result
 }
@@ -213,6 +213,7 @@ type MessageBuffer struct {
 	Group     GroupBy // determines how messages are grouped within summary emails
 	From      string
 	Store     MessageStore
+	Renderer  SummaryRenderer
 	lastFlush time.Time
 	*batches
 }
@@ -250,8 +251,7 @@ func (b *MessageBuffer) NeedsFlush(now time.Time, key RecipientKey) bool {
 	return !(now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit)
 }
 
-func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
-	summaries := make([]*SummaryMessage, 0)
+func (b *MessageBuffer) Flush(outgoing chan<- *SendRequest, force bool) {
 	now := nowGetter()
 
 	// Get messages newer than the last flush.
@@ -264,17 +264,29 @@ func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 		}
 	}
 
-	// Determine which ones need to be summarized.
 	toRemove := make(map[MessageId]bool, 0)
+	toKeep := make(map[MessageId]bool, 0)
+
+	// Summarize message groups that are due to be sent.
 	for key, msgs := range b.messages {
 		if force || b.NeedsFlush(now, key) {
-			received := make([]*ReceivedMessage, 0, len(msgs))
-			for _, msg := range msgs {
-				received = append(received, msg.ReceivedMessage)
-				toRemove[msg.Id] = true
+			summary := Summarize(b.Group, b.From, key.Recipient, msgs)
+
+			sendErrors := make(chan error, 0)
+			outgoing <- &SendRequest{b.Renderer.Render(summary), sendErrors}
+			if err := <-sendErrors; err != nil {
+				// If we failed to send, make sure we keep the messages.
+				for _, msg := range msgs {
+					toKeep[msg.Id] = true
+				}
+			} else {
+				// If we sent successfully, get rid of the messages.
+				for _, msg := range msgs {
+					toRemove[msg.Id] = true
+				}
+				b.Remove(key)
 			}
-			summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, received))
-			b.Remove(key)
+
 		}
 	}
 
@@ -286,7 +298,6 @@ func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	}
 
 	b.lastFlush = now
-	return summaries
 }
 
 func NormalizeAddress(email string) string {
@@ -367,25 +378,16 @@ func GroupByExpr(name string, expr string) GroupBy {
 	}
 }
 
-type Summarizer struct {
-	Buffer   *MessageBuffer
-	Renderer SummaryRenderer
-}
-
-func (s *Summarizer) Run(outgoing chan<- OutgoingMessage, done <-chan TerminationRequest) {
+func (b *MessageBuffer) Run(outgoing chan<- *SendRequest, done <-chan TerminationRequest) {
 	tick := time.Tick(5 * time.Second)
 	for {
 		select {
 		case <-tick:
-			for _, summary := range s.Buffer.Flush(false) {
-				outgoing <- s.Renderer.Render(summary)
-			}
+			b.Flush(outgoing, false)
 		case req := <-done:
 			if req == GracefulShutdown {
 				log.Printf("cleaning up")
-				for _, summary := range s.Buffer.Flush(true) {
-					outgoing <- s.Renderer.Render(summary)
-				}
+				b.Flush(outgoing, true)
 				close(outgoing)
 				return
 			}

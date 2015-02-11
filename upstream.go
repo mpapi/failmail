@@ -84,14 +84,21 @@ type Sender struct {
 	FailedMaildir *Maildir
 }
 
-func (s *Sender) Run(outgoing <-chan OutgoingMessage) {
-	for msg := range outgoing {
-		if sendErr := s.Upstream.Send(msg); sendErr != nil {
+func (s *Sender) Run(outgoing <-chan *SendRequest) {
+	for req := range outgoing {
+		sendErr := s.Upstream.Send(req.Message)
+		if sendErr != nil {
 			log.Printf("couldn't send message: %s", sendErr)
-			if _, saveErr := s.FailedMaildir.Write([]byte(msg.Contents())); saveErr != nil {
+			if _, saveErr := s.FailedMaildir.Write([]byte(req.Message.Contents())); saveErr != nil {
 				log.Printf("couldn't save message: %s", saveErr)
 			}
 		}
+		req.SendErrors <- sendErr
 	}
 	log.Printf("done sending")
+}
+
+type SendRequest struct {
+	Message    OutgoingMessage
+	SendErrors chan<- error
 }

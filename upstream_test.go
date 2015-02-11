@@ -123,7 +123,7 @@ func TestSender(t *testing.T) {
 	defer cleanup()
 
 	upstream := &TestUpstream{make([]OutgoingMessage, 0), nil}
-	outgoing := make(chan OutgoingMessage, 0)
+	outgoing := make(chan *SendRequest, 0)
 
 	done := make(chan bool, 0)
 	go func() {
@@ -132,7 +132,9 @@ func TestSender(t *testing.T) {
 		done <- true
 	}()
 
-	outgoing <- &message{"test", []string{"test"}, []byte("test")}
+	errors := make(chan error, 0)
+	outgoing <- &SendRequest{&message{"test", []string{"test"}, []byte("test")}, errors}
+	<-errors
 	close(outgoing)
 
 	if count := len(upstream.Sends); count != 1 {
@@ -158,7 +160,7 @@ func TestSenderFailed(t *testing.T) {
 	defer cleanup()
 
 	upstream := &TestUpstream{make([]OutgoingMessage, 0), errors.New("fail")}
-	outgoing := make(chan OutgoingMessage, 0)
+	outgoing := make(chan *SendRequest, 0)
 
 	done := make(chan bool, 0)
 	go func() {
@@ -167,7 +169,9 @@ func TestSenderFailed(t *testing.T) {
 		done <- true
 	}()
 
-	outgoing <- &message{"test", []string{"test"}, []byte("test")}
+	errors := make(chan error, 0)
+	outgoing <- &SendRequest{&message{"test", []string{"test"}, []byte("test")}, errors}
+	<-errors
 	close(outgoing)
 
 	select {
@@ -206,13 +210,14 @@ func makeSummaryMessage(t *testing.T, data ...string) *SummaryMessage {
 	for _, d := range data {
 		msgs = append(msgs, makeReceivedMessage(t, d))
 	}
+	stored := makeStoredMessages(msgs...)
 
 	return &SummaryMessage{
-		From:             "test@example.com",
-		To:               []string{"test@example.com"},
-		Subject:          "test",
-		Date:             time.Now(),
-		ReceivedMessages: msgs,
-		UniqueMessages:   Compact(GroupByExpr("group", `{{.Header.Get "Subject"}}`), msgs),
+		From:           "test@example.com",
+		To:             []string{"test@example.com"},
+		Subject:        "test",
+		Date:           time.Now(),
+		StoredMessages: stored,
+		UniqueMessages: Compact(GroupByExpr("group", `{{.Header.Get "Subject"}}`), stored),
 	}
 }
