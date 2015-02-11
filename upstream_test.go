@@ -139,7 +139,7 @@ func TestSender(t *testing.T) {
 		t.Errorf("expected one successful upstream send, got %d", count)
 	}
 
-	msgs, err := failedMaildir.List()
+	msgs, err := failedMaildir.List(MAILDIR_CUR)
 	if err != nil {
 		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
 	} else if count := len(msgs); count != 0 {
@@ -170,21 +170,21 @@ func TestSenderFailed(t *testing.T) {
 	outgoing <- &message{"test", []string{"test"}, []byte("test")}
 	close(outgoing)
 
-	if count := len(upstream.Sends); count != 0 {
-		t.Errorf("expected one successful upstream send, got %d", count)
-	}
-
-	msgs, err := failedMaildir.List()
-	if err != nil {
-		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
-	} else if count := len(msgs); count != 1 {
-		t.Errorf("expected no messages in failed maildir, got %d", count)
-	}
-
 	select {
 	case <-time.Tick(100 * time.Millisecond):
 		t.Fatalf("timed out")
 	case <-done:
+	}
+
+	if count := len(upstream.Sends); count != 0 {
+		t.Errorf("expected one successful upstream send, got %d", count)
+	}
+
+	msgs, err := failedMaildir.List(MAILDIR_CUR)
+	if err != nil {
+		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
+	} else if count := len(msgs); count != 1 {
+		t.Errorf("expected no messages in failed maildir, got %d", count)
 	}
 }
 

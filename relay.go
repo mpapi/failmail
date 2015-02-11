@@ -21,7 +21,7 @@ func (r *MessageRelay) Run(received <-chan *ReceivedMessage, done <-chan Termina
 				outgoing <- r.Renderer.Render(summary)
 			}
 		case msg := <-received:
-			r.Buffer.Add(msg)
+			r.Buffer.Store.Add(nowGetter(), msg)
 		case req := <-done:
 			if req == Reload {
 				r.Reloader.RequestReload()

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/mail"
 	"regexp"
 	"strings"
@@ -212,19 +213,79 @@ type MessageBuffer struct {
 	Group     GroupBy // determines how messages are grouped within summary emails
 	From      string
 	Store     MessageStore
+	lastFlush time.Time
+	*batches
+}
+
+type batches struct {
+	first    map[RecipientKey]time.Time
+	last     map[RecipientKey]time.Time
+	messages map[RecipientKey][]*StoredMessage
+}
+
+func NewBatches() *batches {
+	return &batches{
+		make(map[RecipientKey]time.Time, 0),
+		make(map[RecipientKey]time.Time, 0),
+		make(map[RecipientKey][]*StoredMessage, 0),
+	}
+}
+
+func (b *batches) Add(key RecipientKey, s *StoredMessage) {
+	if _, ok := b.first[key]; !ok {
+		b.first[key] = s.Received
+		b.messages[key] = make([]*StoredMessage, 0)
+	}
+	b.last[key] = s.Received
+	b.messages[key] = append(b.messages[key], s)
+}
+
+func (b *batches) Remove(key RecipientKey) {
+	delete(b.messages, key)
+	delete(b.first, key)
+	delete(b.last, key)
+}
+
+func (b *MessageBuffer) NeedsFlush(now time.Time, key RecipientKey) bool {
+	return !(now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit)
 }
 
 func (b *MessageBuffer) Flush(force bool) []*SummaryMessage {
 	summaries := make([]*SummaryMessage, 0)
 	now := nowGetter()
-	// TODO Could lose data here, if Iterate cleans up before we've committed a summary to storage.
-	b.Store.Iterate(func(key RecipientKey, loadMsgs func() []*ReceivedMessage, first time.Time, last time.Time) bool {
-		if !force && b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
-			return false
+
+	// Get messages newer than the last flush.
+	stored, _ := b.Store.MessagesNewerThan(b.lastFlush)
+	for _, s := range stored {
+		key, _ := b.Batch(s.ReceivedMessage)
+		for _, to := range s.Recipients() {
+			recipKey := RecipientKey{key, NormalizeAddress(to)}
+			b.Add(recipKey, s)
 		}
-		summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, loadMsgs()))
-		return true
-	})
+	}
+
+	// Determine which ones need to be summarized.
+	toRemove := make(map[MessageId]bool, 0)
+	for key, msgs := range b.messages {
+		if force || b.NeedsFlush(now, key) {
+			received := make([]*ReceivedMessage, 0, len(msgs))
+			for _, msg := range msgs {
+				received = append(received, msg.ReceivedMessage)
+				toRemove[msg.Id] = true
+			}
+			summaries = append(summaries, Summarize(b.Group, b.From, key.Recipient, received))
+			b.Remove(key)
+		}
+	}
+
+	// Remove any that were summarized.
+	for id, _ := range toRemove {
+		if err := b.Store.Remove(id); err != nil {
+			log.Printf("failed to remove message from store: %s", err)
+		}
+	}
+
+	b.lastFlush = now
 	return summaries
 }
 
@@ -236,30 +297,20 @@ func NormalizeAddress(email string) string {
 	return strings.ToLower(addr.Address)
 }
 
-func (b *MessageBuffer) Add(msg *ReceivedMessage) {
-	key, _ := b.Batch(msg)
-	for _, to := range msg.To {
-		recipKey := RecipientKey{key, NormalizeAddress(to)}
-		now := nowGetter()
-		b.Store.Add(now, recipKey, msg)
-	}
-}
-
 func (b *MessageBuffer) Stats() *BufferStats {
 	uniqueMessages := 0
 	allMessages := 0
 	now := nowGetter()
 	var lastReceived time.Time
-	b.Store.Iterate(func(key RecipientKey, loadMsgs func() []*ReceivedMessage, first time.Time, last time.Time) bool {
-		if b.Store.InRange(now, key, b.SoftLimit, b.HardLimit) {
-			allMessages += len(loadMsgs())
-		}
-		if lastReceived.Before(last) {
-			lastReceived = last
+	for key, msgs := range b.messages {
+		if !b.NeedsFlush(now, key) {
+			allMessages += len(msgs)
 		}
 		uniqueMessages += 1
-		return false
-	})
+		if lastReceived.Before(b.last[key]) {
+			lastReceived = b.last[key]
+		}
+	}
 	return &BufferStats{uniqueMessages, allMessages, lastReceived}
 }
 

@@ -3,22 +3,32 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"net/mail"
 	"os"
 	"path"
 )
 
-// Maildir stores and retrieves messages in maildir format, under a specific
-// directory.
+// `Maildir` reads, writes, and lists data in a Maildir directory tree. It
+// contains few high-level methods for working with messages in a Maildir, and
+// directly supports manipulating the directory tree directly.
 type Maildir struct {
 	Path string
 
 	messageCounter int
 }
 
-// Creates a new maildir, with the necessary subdirectories.
+// `MaildirSubdir` is the type of the names of a Maildir's subdirectories.
+type MaildirSubdir string
+
+const (
+	MAILDIR_CUR  MaildirSubdir = "cur"
+	MAILDIR_NEW                = "new"
+	MAILDIR_TMP                = "tmp"
+	MAILDIR_META               = ".meta"
+)
+
+// Creates a new Maildir, with the necessary subdirectories.
 func (m *Maildir) Create() error {
-	paths := []string{".", "cur", "new", "tmp"}
+	paths := []string{".", string(MAILDIR_CUR), string(MAILDIR_NEW), string(MAILDIR_TMP), string(MAILDIR_META)}
 	for _, p := range paths {
 		if err := os.Mkdir(path.Join(m.Path, p), os.ModeDir|0755); err != nil && !os.IsExist(err) {
 			return err
@@ -37,16 +47,17 @@ func (m *Maildir) NextUniqueName() (string, error) {
 	return fmt.Sprintf("%d.%d_%d.%s", nowGetter().Unix(), pidGetter(), m.messageCounter, host), nil
 }
 
-// Writes a new message to the maildir, and returns the name of the file it
-// wrote along with any errors.
+// Writes a new message to the Maildir, and returns the name (without parent
+// directory) of the file it wrote along with any errors. The file is written
+// to `MAILDIR_TMP` and moved to `MAILDIR_CUR`, as the specification requires.
 func (m *Maildir) Write(bytes []byte) (string, error) {
 	name, err := m.NextUniqueName()
 	if err != nil {
 		return "", err
 	}
 
-	tmpName := path.Join(m.Path, "tmp", name)
-	curName := path.Join(m.Path, "cur", name+":2,S")
+	tmpName := m.path(name, MAILDIR_TMP)
+	curName := m.path(name+":2,S", MAILDIR_CUR)
 
 	if err = ioutil.WriteFile(tmpName, bytes, 0644); err != nil {
 		return curName, err
@@ -55,52 +66,27 @@ func (m *Maildir) Write(bytes []byte) (string, error) {
 	return path.Base(curName), os.Rename(tmpName, curName)
 }
 
-func (m *Maildir) path(name string) string {
-	return path.Join(m.Path, "cur", name)
+// Returns the path (including the root of the Maildir) of a file named `name`
+// located under the subdirectory `subdir`.
+func (m *Maildir) path(name string, subdir MaildirSubdir) string {
+	return path.Join(m.Path, string(subdir), name)
 }
 
-// Returns the filenames of the messages in the "cur" directory of the maildir.
-func (m *Maildir) List() ([]string, error) {
-	files, err := ioutil.ReadDir(path.Join(m.Path, "cur"))
-	if err != nil {
-		return []string{}, err
-	}
-
-	result := make([]string, 0)
-	for _, file := range files {
-		if !file.IsDir() {
-			result = append(result, file.Name())
-		}
-	}
-	return result, nil
+// Returns `os.FileInfo` for each file in the subdirectory of the Maildir.
+func (m *Maildir) List(subdir MaildirSubdir) ([]os.FileInfo, error) {
+	return ioutil.ReadDir(path.Join(m.Path, string(subdir)))
 }
 
-// Returns the message in the "cur" directory of the maildir, given the
-// filename (e.g. from `List()`), as a byte slice.
-func (m *Maildir) ReadBytes(name string) ([]byte, error) {
-	file, err := os.Open(m.path(name))
-	defer file.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	return ioutil.ReadAll(file)
+// Returns the message in the subdirectory of the Maildir, given the filename
+// (without parent directory, e.g. from the `.Name()` method of an
+// `os.FileInfo` returned by `List()`), as a byte slice.
+func (m *Maildir) ReadBytes(name string, subdir MaildirSubdir) ([]byte, error) {
+	return ioutil.ReadFile(m.path(name, subdir))
 }
 
-// Returns the message in the "cur" directory of the maildir, given the
-// filename (e.g. from `List()`), as a parsed `mail.Message`.
-func (m *Maildir) Read(name string) (*mail.Message, error) {
-	file, err := os.Open(m.path(name))
-	defer file.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	return mail.ReadMessage(file)
-}
-
-// Removes the message from the "cur" directory of the maildir, given the
-// filename (e.g. from `List()`).
-func (m *Maildir) Remove(name string) error {
-	return os.Remove(m.path(name))
+// Removes the message from the subdirectory of the maildir, given the filename
+// (without parent directory, e.g. from the `.Name()` method of an
+// `os.FileInfo` returned by `List()`).
+func (m *Maildir) Remove(name string, subdir MaildirSubdir) error {
+	return os.Remove(m.path(name, subdir))
 }

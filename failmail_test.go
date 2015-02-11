@@ -75,7 +75,7 @@ func TestSendUpstream(t *testing.T) {
 		t.Errorf("expected one successful upstream send, got %d", count)
 	}
 
-	msgs, err := failedMaildir.List()
+	msgs, err := failedMaildir.List(MAILDIR_CUR)
 	if err != nil {
 		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
 	} else if count := len(msgs); count != 0 {
@@ -109,7 +109,7 @@ func TestSendUpstreamFailed(t *testing.T) {
 		t.Errorf("expected one successful upstream send, got %d", count)
 	}
 
-	msgs, err := failedMaildir.List()
+	msgs, err := failedMaildir.List(MAILDIR_CUR)
 	if err != nil {
 		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
 	} else if count := len(msgs); count != 1 {

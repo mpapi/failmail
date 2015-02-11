@@ -74,6 +74,7 @@ func main() {
 		Group:     config.Group(),
 		From:      config.From,
 		Store:     store,
+		batches:   NewBatches(),
 	}
 
 	// An upstream SMTP server is used to send the summarized messages flushed

@@ -117,34 +117,38 @@ func TestSummarize(t *testing.T) {
 	}
 }
 
-func TestMessageBuffer(t *testing.T) {
-	buf := &MessageBuffer{5 * time.Second, 9 * time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), "test@example.com", NewMemoryStore()}
+func makeMessageBuffer() *MessageBuffer {
+	return &MessageBuffer{
+		SoftLimit: 5 * time.Second,
+		HardLimit: 9 * time.Second,
+		Batch:     GroupByExpr("batch", `{{.Header.Get "Subject"}}`),
+		Group:     GroupByExpr("group", `{{.Header.Get "Subject"}}`),
+		From:      "test@example.com",
+		Store:     NewMemoryStore(),
+		batches:   NewBatches(),
+	}
+}
 
+func TestMessageBuffer(t *testing.T) {
+	buf := makeMessageBuffer()
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
-	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	if count := buf.Stats().ActiveBatches; count != 1 {
-		t.Errorf("unexpected buffer message count: %d", count)
-	}
-	unpatch()
-
-	unpatch = patchTime(time.Unix(1393650004, 0))
+	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
 	if summaries := buf.Flush(false); len(summaries) != 0 {
 		t.Errorf("unexpected summaries from flush: %v", summaries)
+	} else if count := buf.Stats().ActiveBatches; count != 1 {
+		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650005, 0))
-	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 2"))
-	if count := buf.Stats().ActiveBatches; count != 1 {
+	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 2"))
+	if summaries := buf.Flush(false); len(summaries) != 0 {
+		t.Errorf("unexpected summaries from flush: %v", summaries)
+	} else if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
-	}
-	stats := buf.Stats()
-	if stats.ActiveBatches != 1 {
-		t.Errorf("unexpected stats active batches count: %d", stats.ActiveBatches)
-	}
-	if stats.ActiveMessages != 2 {
-		t.Errorf("unexpected stats active messages count: %d", stats.ActiveMessages)
+	} else if count := buf.Stats().ActiveMessages; count != 2 {
+		t.Errorf("unexpected stats active messages count: %d", count)
 	}
 	unpatch()
 
@@ -172,7 +176,7 @@ func TestMessageBuffer(t *testing.T) {
 		t.Errorf("unexpected summary subject: %s", subject)
 	}
 
-	stats = buf.Stats()
+	stats := buf.Stats()
 	if stats.ActiveBatches != 0 {
 		t.Errorf("unexpected stats active batches count: %d", stats.ActiveBatches)
 	}
@@ -183,12 +187,14 @@ func TestMessageBuffer(t *testing.T) {
 }
 
 func TestFlushForce(t *testing.T) {
-	buf := &MessageBuffer{5 * time.Second, 9 * time.Second, GroupByExpr("batch", `{{.Header.Get "Subject"}}`), GroupByExpr("group", `{{.Header.Get "Subject"}}`), "test@example.com", NewMemoryStore()}
+	buf := makeMessageBuffer()
 
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
-	buf.Add(makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	if count := buf.Stats().ActiveBatches; count != 1 {
+	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
+	if summaries := buf.Flush(false); len(summaries) != 0 {
+		t.Errorf("unexpected summaries from flush: %v", summaries)
+	} else if count := buf.Stats().ActiveBatches; count != 1 {
 		t.Errorf("unexpected buffer message count: %d", count)
 	}
 	unpatch()

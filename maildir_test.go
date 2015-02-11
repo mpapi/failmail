@@ -1,11 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net/mail"
 	"os"
 	"path"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -100,17 +101,19 @@ func TestList(t *testing.T) {
 		t.Errorf("couldn't write to maildir: %s", err)
 	}
 
-	items, err := m.List()
+	items, err := m.List(MAILDIR_CUR)
 	if err != nil {
 		t.Errorf("unexpected error listing messages: %s", err)
-	} else if !reflect.DeepEqual(items, []string{"1393650000.1000_1.test:2,S"}) {
-		t.Errorf("unexpected messages in list: %v", items)
+	} else if count := len(items); count != 1 {
+		t.Errorf("unexpected number of messages in message list: %d != 1", count)
+	} else if info := items[0]; info.Name() != "1393650000.1000_1.test:2,S" {
+		t.Errorf("unexpected messages in list: %v", info.Name())
 	}
 }
 
 func TestListInvalidDir(t *testing.T) {
 	m := &Maildir{Path: "/does-not-exist"}
-	files, err := m.List()
+	files, err := m.List(MAILDIR_CUR)
 
 	if err == nil {
 		t.Errorf("expected an error from List")
@@ -121,7 +124,7 @@ func TestListInvalidDir(t *testing.T) {
 	}
 }
 
-func TestRead(t *testing.T) {
+func TestReadBytes(t *testing.T) {
 	m, cleanup := makeTestMaildir(t)
 	defer cleanup()
 
@@ -133,9 +136,10 @@ func TestRead(t *testing.T) {
 		t.Errorf("couldn't write to maildir: %s", err)
 	}
 
-	msg, err := m.Read("1393650000.1000_1.test:2,S")
-	if err != nil {
+	if data, err := m.ReadBytes("1393650000.1000_1.test:2,S", MAILDIR_CUR); err != nil {
 		t.Errorf("unexpected error reading message: %s", err)
+	} else if msg, err := mail.ReadMessage(bytes.NewBuffer(data)); err != nil {
+		t.Errorf("unexpected error parsing message: %s", err)
 	} else if subj := msg.Header.Get("Subject"); subj != "test" {
 		t.Errorf("unexpected subject for message: %s", subj)
 	}
