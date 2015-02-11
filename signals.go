@@ -14,15 +14,16 @@ const (
 	Reload
 )
 
-func HandleSignals(reqs chan<- TerminationRequest) {
-	signals := make(chan os.Signal, 4)
+func HandleSignals(reqs []chan<- TerminationRequest) {
+	signals := make(chan os.Signal, 0)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGUSR1)
-	for sig := range signals {
-		log.Printf("caught signal %s", sig)
+	sig := <-signals
+	log.Printf("caught signal %s", sig)
+	for _, req := range reqs {
 		if sig == syscall.SIGUSR1 {
-			reqs <- Reload
+			req <- Reload
 		} else {
-			reqs <- GracefulShutdown
+			req <- GracefulShutdown
 		}
 	}
 }

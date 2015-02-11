@@ -1,12 +1,10 @@
 package main
 
 import (
-	"errors"
 	"io/ioutil"
 	"os"
 	"path"
 	"testing"
-	"time"
 )
 
 func TestBatchConfig(t *testing.T) {
@@ -53,74 +51,6 @@ func (t *TestUpstream) Send(msg OutgoingMessage) error {
 	}
 	t.Sends = append(t.Sends, msg)
 	return nil
-}
-
-func TestSendUpstream(t *testing.T) {
-	failedMaildir, cleanup := makeTestMaildir(t)
-	defer cleanup()
-
-	upstream := &TestUpstream{make([]OutgoingMessage, 0), nil}
-	outgoing := make(chan OutgoingMessage, 0)
-
-	done := make(chan bool, 0)
-	go func() {
-		sendUpstream(outgoing, upstream, failedMaildir)
-		done <- true
-	}()
-
-	outgoing <- &message{"test", []string{"test"}, []byte("test")}
-	close(outgoing)
-
-	if count := len(upstream.Sends); count != 1 {
-		t.Errorf("expected one successful upstream send, got %d", count)
-	}
-
-	msgs, err := failedMaildir.List(MAILDIR_CUR)
-	if err != nil {
-		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
-	} else if count := len(msgs); count != 0 {
-		t.Errorf("expected no messages in failed maildir, got %d", count)
-	}
-
-	select {
-	case <-time.Tick(100 * time.Millisecond):
-		t.Fatalf("timed out")
-	case <-done:
-	}
-}
-
-func TestSendUpstreamFailed(t *testing.T) {
-	failedMaildir, cleanup := makeTestMaildir(t)
-	defer cleanup()
-
-	upstream := &TestUpstream{make([]OutgoingMessage, 0), errors.New("fail")}
-	outgoing := make(chan OutgoingMessage, 0)
-
-	done := make(chan bool, 0)
-	go func() {
-		sendUpstream(outgoing, upstream, failedMaildir)
-		done <- true
-	}()
-
-	outgoing <- &message{"test", []string{"test"}, []byte("test")}
-	close(outgoing)
-
-	if count := len(upstream.Sends); count != 0 {
-		t.Errorf("expected one successful upstream send, got %d", count)
-	}
-
-	msgs, err := failedMaildir.List(MAILDIR_CUR)
-	if err != nil {
-		t.Errorf("unexpected error listing maildir for failed messages: %s", err)
-	} else if count := len(msgs); count != 1 {
-		t.Errorf("expected no messages in failed maildir, got %d", count)
-	}
-
-	select {
-	case <-time.Tick(100 * time.Millisecond):
-		t.Fatalf("timed out")
-	case <-done:
-	}
 }
 
 func TestWritePidfile(t *testing.T) {

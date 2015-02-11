@@ -91,7 +91,7 @@ func TestListener(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -130,7 +130,7 @@ func TestListenerWithMessage(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -156,7 +156,7 @@ func TestListenerWithBadServer(t *testing.T) {
 	received := make(chan *ReceivedMessage, 1)
 	done := make(chan bool, 1)
 	go func() {
-		l.Listen(received, NewReloader(), 1*time.Millisecond)
+		l.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 1*time.Millisecond)
 		done <- true
 	}()
 
@@ -204,7 +204,7 @@ func TestListenerWithAuth(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -242,7 +242,7 @@ func TestListenerWithPartialAuth(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
 	<-done
 }
 
@@ -285,7 +285,7 @@ func TestListenerWithTLS(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
 	<-done
 }
 

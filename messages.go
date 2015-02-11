@@ -366,3 +366,29 @@ func GroupByExpr(name string, expr string) GroupBy {
 		return buf.String(), err
 	}
 }
+
+type Summarizer struct {
+	Buffer   *MessageBuffer
+	Renderer SummaryRenderer
+}
+
+func (s *Summarizer) Run(outgoing chan<- OutgoingMessage, done <-chan TerminationRequest) {
+	tick := time.Tick(5 * time.Second)
+	for {
+		select {
+		case <-tick:
+			for _, summary := range s.Buffer.Flush(false) {
+				outgoing <- s.Renderer.Render(summary)
+			}
+		case req := <-done:
+			if req == GracefulShutdown {
+				log.Printf("cleaning up")
+				for _, summary := range s.Buffer.Flush(true) {
+					outgoing <- s.Renderer.Render(summary)
+				}
+				close(outgoing)
+				return
+			}
+		}
+	}
+}

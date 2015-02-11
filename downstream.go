@@ -112,9 +112,25 @@ func WaitWithTimeout(waitGroup *sync.WaitGroup, timeout time.Duration) bool {
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
-func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader, shutdownTimeout time.Duration) {
+func (l *Listener) Listen(received chan<- *ReceivedMessage, done <-chan TerminationRequest, reloader *Reloader, shutdownTimeout time.Duration) {
 	l.Printf("listening: %s", l.Socket)
 	waitGroup := new(sync.WaitGroup)
+
+	// TODO This is only here while the receiver sender are getting split apart.
+	go func() {
+		req := <-done
+		if req == Reload {
+			reloader.RequestReload()
+		} else {
+			l.Printf("waiting %s for open connections to finish", shutdownTimeout)
+			WaitWithTimeout(waitGroup, shutdownTimeout)
+
+			l.Printf("closing listening socket for reload")
+			l.Socket.Close()
+
+			close(received)
+		}
+	}()
 
 	go reloader.OnRequest(func() uintptr {
 		l.Printf("waiting %s for open connections to finish", shutdownTimeout)
@@ -133,6 +149,8 @@ func (l *Listener) Listen(received chan<- *ReceivedMessage, reloader *Reloader, 
 		// inherit it twice (the second one being the one passed to
 		// ExtraFiles).
 		syscall.CloseOnExec(newfd)
+
+		close(received)
 
 		return uintptr(newfd)
 	})

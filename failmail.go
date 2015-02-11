@@ -5,6 +5,7 @@ import (
 	"github.com/hut8labs/failmail/configure"
 	"log"
 	"os"
+	"sync"
 )
 
 const VERSION = "0.2.0"
@@ -36,88 +37,113 @@ func main() {
 	}
 	log.Printf("failmail %s, starting up", VERSION)
 
-	// A channel for incoming messages. The listener sends on the channel, and
-	// receives are added to a MessageBuffer in the channel consumer below.
-	received := make(chan *ReceivedMessage, 64)
-
-	// A channel for outgoing messages.
-	outgoing := make(chan OutgoingMessage, 64)
-
-	// Handle signals for reloading/shutdown.
-	done := make(chan TerminationRequest, 1)
-	go HandleSignals(done)
-
-	listener, err := config.Listener()
+	store, err := config.Store()
 	if err != nil {
-		log.Fatalf("failed to create listener: %s", err)
+		log.Fatalf("failed to create message store: %s", err)
 	}
-
-	reloader := NewReloader()
-	go listener.Listen(received, reloader, config.ShutdownTimeout)
 
 	if config.Pidfile != "" {
 		writePidfile(config.Pidfile)
 		defer os.Remove(config.Pidfile)
 	}
 
-	store, err := config.Store()
-	if err != nil {
-		log.Fatalf("failed to create message store: %s", err)
+	reloader := NewReloader()
+
+	signalListeners := make([]chan<- TerminationRequest, 0)
+	waitGroup := new(sync.WaitGroup)
+
+	if config.Receiver {
+		listener, err := config.Listener()
+		if err != nil {
+			log.Fatalf("failed to create listener: %s", err)
+		}
+
+		// A channel for incoming messages. The listener sends on the channel, and
+		// receives are added to a MessageBuffer in the channel consumer below.
+		received := make(chan *ReceivedMessage, 64)
+
+		done := make(chan TerminationRequest, 1)
+		signalListeners = append(signalListeners, done)
+
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			listener.Listen(received, done, reloader, config.ShutdownTimeout)
+			log.Printf("receiver: done")
+		}()
+
+		writer := &MessageWriter{store}
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			writer.Run(received)
+			log.Printf("writer: done")
+		}()
 	}
 
-	// A `MessageBuffer` collects incoming messages and decides how to batch
-	// them up and when to relay them to an upstream SMTP server.
-	buffer := &MessageBuffer{
-		SoftLimit: config.WaitPeriod,
-		HardLimit: config.MaxWait,
-		Batch:     config.Batch(),
-		Group:     config.Group(),
-		From:      config.From,
-		Store:     store,
-		batches:   NewBatches(),
+	if config.Sender {
+		// A `MessageBuffer` collects incoming messages and decides how to batch
+		// them up and when to relay them to an upstream SMTP server.
+		buffer := &MessageBuffer{
+			SoftLimit: config.WaitPeriod,
+			HardLimit: config.MaxWait,
+			Batch:     config.Batch(),
+			Group:     config.Group(),
+			From:      config.From,
+			Store:     store,
+			batches:   NewBatches(),
+		}
+
+		// An upstream SMTP server is used to send the summarized messages flushed
+		// from the MessageBuffer.
+		upstream, err := config.Upstream()
+		if err != nil {
+			log.Fatalf("failed to create upstream: %s", err)
+		}
+
+		// Any messages we were unable to send upstream will be written to this
+		// maildir.
+		failedMaildir := &Maildir{Path: config.FailDir}
+		if err := failedMaildir.Create(); err != nil {
+			log.Fatalf("failed to create maildir for failed messages at %s: %s", config.FailDir, err)
+		}
+
+		go ListenHTTP(config.BindHTTP, buffer)
+
+		// A channel for outgoing messages.
+		outgoing := make(chan OutgoingMessage, 64)
+
+		done := make(chan TerminationRequest, 1)
+		signalListeners = append(signalListeners, done)
+
+		summarizer := &Summarizer{buffer, config.SummaryRenderer()}
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			summarizer.Run(outgoing, done)
+			log.Printf("summarizer: done")
+		}()
+
+		sender := &Sender{upstream, failedMaildir}
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			sender.Run(outgoing)
+			log.Printf("sender: done")
+		}()
 	}
 
-	// An upstream SMTP server is used to send the summarized messages flushed
-	// from the MessageBuffer.
-	upstream, err := config.Upstream()
-	if err != nil {
-		log.Fatalf("failed to create upstream: %s", err)
+	if !config.Receiver && !config.Sender {
+		log.Fatalf("must specify --receiver and/or --sender")
 	}
 
-	// Any messages we were unable to send upstream will be written to this
-	// maildir.
-	failedMaildir := &Maildir{Path: config.FailDir}
-	if err := failedMaildir.Create(); err != nil {
-		log.Fatalf("failed to create maildir for failed messages at %s: %s", config.FailDir, err)
-	}
-
-	go ListenHTTP(config.BindHTTP, buffer)
-
-	relay := &MessageRelay{
-		Renderer: config.SummaryRenderer(),
-		Buffer:   buffer,
-		Reloader: reloader,
-	}
-	go relay.Run(received, done, outgoing)
-
-	sender := &Sender{upstream, failedMaildir}
-	sender.Run(outgoing)
+	// Handle signals for reloading/shutdown, wait for goroutines to finish.
+	HandleSignals(signalListeners)
+	waitGroup.Wait()
 
 	if err := reloader.ReloadIfNecessary(); err != nil {
 		log.Fatalf("failed to reload: %s", err)
 	}
-}
-
-func sendUpstream(outgoing <-chan OutgoingMessage, upstream Upstream, failedMaildir *Maildir) {
-	for msg := range outgoing {
-		if sendErr := upstream.Send(msg); sendErr != nil {
-			log.Printf("couldn't send message: %s", sendErr)
-			if _, saveErr := failedMaildir.Write([]byte(msg.Contents())); saveErr != nil {
-				log.Printf("couldn't save message: %s", saveErr)
-			}
-		}
-	}
-	log.Printf("done sending")
 }
 
 func writePidfile(pidfile string) {

@@ -219,3 +219,14 @@ func (s *MemoryStore) MessagesNewerThan(t time.Time) ([]*StoredMessage, []error)
 	}
 	return result, nil
 }
+
+type MessageWriter struct {
+	Store MessageStore
+}
+
+func (w *MessageWriter) Run(received <-chan *ReceivedMessage) error {
+	for msg := range received {
+		w.Store.Add(nowGetter(), msg)
+	}
+	return nil
+}

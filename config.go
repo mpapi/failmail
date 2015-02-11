@@ -37,6 +37,10 @@ type Config struct {
 	FailDir       string `help:"write failed sends to this maildir"`
 	AllDir        string `help:"write all sends to this maildir"`
 
+	// Options that control what gets run.
+	Receiver bool `help:"receive and store incoming messages"`
+	Sender   bool `help:"summarize and send messages"`
+
 	// Monitoring options.
 	BindHTTP string `help:"local bind address for the HTTP server"`
 	Pidfile  string `help:"write a pidfile to this path"`
