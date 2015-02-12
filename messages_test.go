@@ -17,11 +17,11 @@ func (r BadReader) Read(p []byte) (int, error) {
 
 func TestReceivedMessageReadBody(t *testing.T) {
 	msg := makeReceivedMessage(t, "Subject: test\r\n\r\ntest body\r\n")
-	if body := msg.ReadBody(); body != "test body\r\n" {
-		t.Errorf("unexpected message body: %s", body)
+	if body, err := msg.ReadBody(); body != "test body\r\n" || err != nil {
+		t.Errorf("unexpected message body: %s, %s", body, err)
 	}
-	if body := msg.ReadBody(); body != "" {
-		t.Errorf("unexpected message body on 2nd call: %s", body)
+	if body, err := msg.ReadBody(); body != "" || err != nil {
+		t.Errorf("unexpected message body on 2nd call: %s, %s", body, err)
 	}
 }
 
@@ -30,8 +30,8 @@ func TestReceivedMessageReadBodyMissingMessage(t *testing.T) {
 		message: &message{From: "test@example.com", To: []string{"test@example.com"}},
 		Parsed:  &mail.Message{Body: BadReader{}},
 	}
-	if body := msg.ReadBody(); body != "[unreadable message body]" {
-		t.Errorf("unexpected message body for nil message: %s", body)
+	if body, err := msg.ReadBody(); body != "[unreadable message body]" || err == nil {
+		t.Errorf("unexpected message body for nil message: %s, %s", body, err)
 	}
 }
 
@@ -39,8 +39,8 @@ func TestReceivedMessageReadBodyUnreadableMessage(t *testing.T) {
 	msg := &ReceivedMessage{
 		message: &message{From: "test@example.com", To: []string{"test@example.com"}},
 	}
-	if body := msg.ReadBody(); body != "[no message body]" {
-		t.Errorf("unexpected message body for nil message: %s", body)
+	if body, err := msg.ReadBody(); body != "[no message body]" || err != nil {
+		t.Errorf("unexpected message body for nil message: %s, %s", body, err)
 	}
 }
 
@@ -65,8 +65,8 @@ func TestReceivedMessageOutgoing(t *testing.T) {
 	if to := msg.Recipients(); len(to) != 1 || to[0] != "test2@example.com" {
 		t.Errorf("unexpected to: %s", to)
 	}
-	if body := msg.ReadBody(); body != "test body\r\n" {
-		t.Errorf("unexpected body: %s", body)
+	if body, err := msg.ReadBody(); body != "test body\r\n" || err != nil {
+		t.Errorf("unexpected body: %s, %s", body, err)
 	}
 }
 

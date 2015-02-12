@@ -49,13 +49,13 @@ type ReceivedMessage struct {
 	Parsed *mail.Message
 }
 
-func (r *ReceivedMessage) ReadBody() string {
+func (r *ReceivedMessage) ReadBody() (string, error) {
 	if r.Parsed == nil {
-		return "[no message body]"
+		return "[no message body]", nil
 	} else if body, err := ioutil.ReadAll(r.Parsed.Body); err != nil {
-		return "[unreadable message body]"
+		return "[unreadable message body]", err
 	} else {
-		return string(body)
+		return string(body), nil
 	}
 }
 
@@ -101,7 +101,12 @@ func Compact(group GroupBy, stored []*StoredMessage) []*UniqueMessage {
 				unique.End = date
 			}
 		}
-		unique.Body = msg.ReadBody()
+		body, err := msg.ReadBody()
+		if err != nil {
+			log.Printf("failed to read body from message: %s", err)
+		}
+
+		unique.Body = body
 		unique.Subject = msg.Parsed.Header.Get("subject")
 		unique.Count += 1
 	}
