@@ -171,3 +171,42 @@ func (c *Config) Listener() (*Listener, error) {
 	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
 	return listener, nil
 }
+
+func (c *Config) Writer() (*MessageWriter, error) {
+	if store, err := c.Store(); err != nil {
+		return nil, err
+	} else {
+		return &MessageWriter{store}, nil
+	}
+}
+
+func (c *Config) Buffer() (*MessageBuffer, error) {
+	if store, err := c.Store(); err != nil {
+		return nil, err
+	} else {
+		return &MessageBuffer{
+			SoftLimit: c.WaitPeriod,
+			HardLimit: c.MaxWait,
+			Batch:     c.Batch(),
+			Group:     c.Group(),
+			From:      c.From,
+			Store:     store,
+			Renderer:  c.SummaryRenderer(),
+			batches:   NewBatches(),
+		}, nil
+	}
+}
+
+func (c *Config) MakeSender() (*Sender, error) {
+	upstream, err := c.Upstream()
+	if err != nil {
+		return nil, err
+	}
+
+	failedMaildir := &Maildir{Path: c.FailDir}
+	if err := failedMaildir.Create(); err != nil {
+		return nil, err
+	}
+
+	return &Sender{upstream, failedMaildir}, nil
+}

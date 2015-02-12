@@ -37,11 +37,6 @@ func main() {
 	}
 	log.Printf("failmail %s, starting up", VERSION)
 
-	store, err := config.Store()
-	if err != nil {
-		log.Fatalf("failed to create message store: %s", err)
-	}
-
 	if config.Pidfile != "" {
 		writePidfile(config.Pidfile)
 		defer os.Remove(config.Pidfile)
@@ -58,6 +53,11 @@ func main() {
 			log.Fatalf("failed to create listener: %s", err)
 		}
 
+		writer, err := config.Writer()
+		if err != nil {
+			log.Fatalf("failed to create writer: %s", err)
+		}
+
 		// A channel for incoming messages. The listener sends on the channel, and
 		// receives are added to a MessageBuffer in the channel consumer below.
 		received := make(chan *StorageRequest, 64)
@@ -72,7 +72,6 @@ func main() {
 			log.Printf("receiver: done")
 		}()
 
-		writer := &MessageWriter{store}
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
@@ -84,29 +83,14 @@ func main() {
 	if config.Sender {
 		// A `MessageBuffer` collects incoming messages and decides how to batch
 		// them up and when to relay them to an upstream SMTP server.
-		buffer := &MessageBuffer{
-			SoftLimit: config.WaitPeriod,
-			HardLimit: config.MaxWait,
-			Batch:     config.Batch(),
-			Group:     config.Group(),
-			From:      config.From,
-			Store:     store,
-			Renderer:  config.SummaryRenderer(),
-			batches:   NewBatches(),
-		}
-
-		// An upstream SMTP server is used to send the summarized messages flushed
-		// from the MessageBuffer.
-		upstream, err := config.Upstream()
+		buffer, err := config.Buffer()
 		if err != nil {
-			log.Fatalf("failed to create upstream: %s", err)
+			log.Fatalf("failed to create buffer: %s", err)
 		}
 
-		// Any messages we were unable to send upstream will be written to this
-		// maildir.
-		failedMaildir := &Maildir{Path: config.FailDir}
-		if err := failedMaildir.Create(); err != nil {
-			log.Fatalf("failed to create maildir for failed messages at %s: %s", config.FailDir, err)
+		sender, err := config.MakeSender()
+		if err != nil {
+			log.Fatalf("failed to create sender: %s", err)
 		}
 
 		go ListenHTTP(config.BindHTTP, buffer)
@@ -124,7 +108,6 @@ func main() {
 			log.Printf("summarizer: done")
 		}()
 
-		sender := &Sender{upstream, failedMaildir}
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
