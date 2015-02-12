@@ -146,7 +146,7 @@ func TestMessageBuffer(t *testing.T) {
 		}
 	}()
 
-	buf.Flush(outgoing, false)
+	buf.Flush(nowGetter(), outgoing, false)
 	if count := len(summaries); count != 0 {
 		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	} else if count := buf.Stats().ActiveBatches; count != 1 {
@@ -156,7 +156,7 @@ func TestMessageBuffer(t *testing.T) {
 
 	unpatch = patchTime(time.Unix(1393650005, 0))
 	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 2"))
-	buf.Flush(outgoing, false)
+	buf.Flush(nowGetter(), outgoing, false)
 	if count := len(summaries); count != 0 {
 		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	} else if count := buf.Stats().ActiveBatches; count != 1 {
@@ -167,14 +167,14 @@ func TestMessageBuffer(t *testing.T) {
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650008, 0))
-	buf.Flush(outgoing, false)
+	buf.Flush(nowGetter(), outgoing, false)
 	if count := len(summaries); count != 0 {
 		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	}
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650009, 0))
-	buf.Flush(outgoing, false)
+	buf.Flush(nowGetter(), outgoing, false)
 	if count := len(summaries); count != 1 {
 		t.Errorf("unexpected summaries from flush: %d != 1", count)
 	}
@@ -218,7 +218,7 @@ func TestFlushForce(t *testing.T) {
 	unpatch := patchTime(time.Unix(1393650000, 0))
 	defer unpatch()
 	buf.Store.Add(nowGetter(), makeReceivedMessage(t, "To: test@example.com\r\nSubject: test\r\n\r\ntest 1"))
-	buf.Flush(outgoing, false)
+	buf.Flush(nowGetter(), outgoing, false)
 	if count := len(summaries); count != 0 {
 		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	} else if count := buf.Stats().ActiveBatches; count != 1 {
@@ -227,12 +227,12 @@ func TestFlushForce(t *testing.T) {
 	unpatch()
 
 	unpatch = patchTime(time.Unix(1393650004, 0))
-	buf.Flush(outgoing, false)
+	buf.Flush(nowGetter(), outgoing, false)
 	if count := len(summaries); count != 0 {
 		t.Errorf("unexpected summaries from flush: %d != 0", count)
 	}
 
-	buf.Flush(outgoing, true)
+	buf.Flush(nowGetter(), outgoing, true)
 	if count := len(summaries); count != 1 {
 		t.Errorf("unexpected summaries from flush: %d != 1", count)
 	}

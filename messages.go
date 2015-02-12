@@ -251,8 +251,7 @@ func (b *MessageBuffer) NeedsFlush(now time.Time, key RecipientKey) bool {
 	return !(now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit)
 }
 
-func (b *MessageBuffer) Flush(outgoing chan<- *SendRequest, force bool) {
-	now := nowGetter()
+func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force bool) {
 
 	// Get messages newer than the last flush.
 	stored, _ := b.Store.MessagesNewerThan(b.lastFlush)
@@ -382,12 +381,12 @@ func (b *MessageBuffer) Run(outgoing chan<- *SendRequest, done <-chan Terminatio
 	tick := time.Tick(5 * time.Second)
 	for {
 		select {
-		case <-tick:
-			b.Flush(outgoing, false)
+		case now := <-tick:
+			b.Flush(now, outgoing, false)
 		case req := <-done:
 			if req == GracefulShutdown {
 				log.Printf("cleaning up")
-				b.Flush(outgoing, true)
+				b.Flush(nowGetter(), outgoing, true)
 				close(outgoing)
 				return
 			}
