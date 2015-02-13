@@ -45,8 +45,8 @@ func (b *BadServerSocket) Addr() net.Addr {
 	return nil
 }
 
-func (b *BadServerSocket) Fd() uintptr {
-	return 0
+func (b *BadServerSocket) Fd() (uintptr, error) {
+	return 0, nil
 }
 
 func (b *BadServerSocket) String() string {
@@ -91,7 +91,7 @@ func TestListener(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
 	<-done
 }
 
@@ -135,7 +135,7 @@ func TestListenerWithMessage(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
 	<-done
 }
 
@@ -161,7 +161,7 @@ func TestListenerWithBadServer(t *testing.T) {
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 1)
 	go func() {
-		l.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 1*time.Millisecond)
+		l.Listen(received, make(chan TerminationRequest, 0), 1*time.Millisecond)
 		done <- true
 	}()
 
@@ -209,7 +209,7 @@ func TestListenerWithAuth(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
 	<-done
 }
 
@@ -247,7 +247,7 @@ func TestListenerWithPartialAuth(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
 	<-done
 }
 
@@ -290,7 +290,7 @@ func TestListenerWithTLS(t *testing.T) {
 		done <- true
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), NewReloader(), 100*time.Millisecond)
+	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
 	<-done
 }
 

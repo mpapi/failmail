@@ -42,10 +42,10 @@ func main() {
 		defer os.Remove(config.Pidfile)
 	}
 
-	reloader := NewReloader()
-
 	signalListeners := make([]chan<- TerminationRequest, 0)
 	waitGroup := new(sync.WaitGroup)
+
+	reloadFd := uintptr(0)
 
 	if config.Receiver {
 		listener, err := config.Listener()
@@ -68,8 +68,12 @@ func main() {
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			listener.Listen(received, done, reloader, config.ShutdownTimeout)
-			log.Printf("receiver: done")
+			reloadFd, err = listener.Listen(received, done, config.ShutdownTimeout)
+			if err != nil {
+				log.Printf("receiver failed to shut down cleanly: %s", err)
+			} else {
+				log.Printf("receiver: done")
+			}
 		}()
 
 		waitGroup.Add(1)
@@ -121,10 +125,10 @@ func main() {
 	}
 
 	// Handle signals for reloading/shutdown, wait for goroutines to finish.
-	HandleSignals(signalListeners)
+	shouldReload := HandleSignals(signalListeners)
 	waitGroup.Wait()
 
-	if err := reloader.ReloadIfNecessary(); err != nil {
+	if err := TryReload(shouldReload, reloadFd); err != nil {
 		log.Fatalf("failed to reload: %s", err)
 	}
 }

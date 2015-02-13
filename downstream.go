@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"reflect"
 	"sync"
 	"syscall"
 	"time"
@@ -30,7 +29,7 @@ type Listener struct {
 // ServerSocket is a `net.Listener` that can return its file descriptor.
 type ServerSocket interface {
 	net.Listener
-	Fd() uintptr
+	Fd() (uintptr, error)
 	String() string
 }
 
@@ -51,8 +50,12 @@ func NewTCPServerSocket(addr string) (*TCPServerSocket, error) {
 	return &TCPServerSocket{ln, addr}, err
 }
 
-func (t *TCPServerSocket) Fd() uintptr {
-	return internalSocketFd(t.TCPListener)
+func (t *TCPServerSocket) Fd() (uintptr, error) {
+	if file, err := t.File(); err != nil {
+		return 0, err
+	} else {
+		return file.Fd(), nil
+	}
 }
 
 func (t *TCPServerSocket) String() string {
@@ -72,21 +75,18 @@ func NewFileServerSocket(fd uintptr) (*FileServerSocket, error) {
 	return &FileServerSocket{ln}, err
 }
 
-func (f *FileServerSocket) Fd() uintptr {
-	tcpListener := f.Listener.(*net.TCPListener)
-	return internalSocketFd(tcpListener)
+func (f *FileServerSocket) Fd() (uintptr, error) {
+	if tcpListener, ok := f.Listener.(*net.TCPListener); !ok {
+		return 0, fmt.Errorf("%s is not a TCP socket", f)
+	} else if file, err := tcpListener.File(); err != nil {
+		return 0, err
+	} else {
+		return file.Fd(), err
+	}
 }
 
 func (f *FileServerSocket) String() string {
-	return fmt.Sprintf("fd %d", f.Fd())
-}
-
-func internalSocketFd(listener *net.TCPListener) uintptr {
-	// This is not particularly robust, but TCPListener doesn't expose the FD
-	// another way, and this implementation also serves as an assertion of
-	// layout of the underlying data structure (meaning, we want to panic
-	// rather than try to gracefully handle the error).
-	return uintptr(reflect.ValueOf(listener).Elem().FieldByName("fd").Elem().FieldByName("sysfd").Int())
+	return fmt.Sprintf("fd from file")
 }
 
 // Calls `Wait()` on a `sync.WaitGroup`, blocking for no more than the timeout.
@@ -112,73 +112,92 @@ func WaitWithTimeout(waitGroup *sync.WaitGroup, timeout time.Duration) bool {
 
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
-func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan TerminationRequest, reloader *Reloader, shutdownTimeout time.Duration) {
+func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan TerminationRequest, shutdownTimeout time.Duration) (uintptr, error) {
 	l.Printf("listening: %s", l.Socket)
+
 	waitGroup := new(sync.WaitGroup)
+	acceptFinished := make(chan bool, 0)
 
-	// TODO This is only here while the receiver sender are getting split apart.
+	// Accept connections in a goroutine, and add them to the WaitGroup.
 	go func() {
-		req := <-done
-		if req == Reload {
-			reloader.RequestReload()
-		} else {
-			l.Printf("waiting %s for open connections to finish", shutdownTimeout)
-			WaitWithTimeout(waitGroup, shutdownTimeout)
+		for {
+			conn, err := l.Socket.Accept()
+			if err != nil {
+				l.Printf("error accepting connection: %s", err)
+				break
+			}
 
-			l.Printf("closing listening socket for reload")
-			l.Socket.Close()
+			l.conns += 1
 
-			close(received)
+			// Handle each incoming connection in its own goroutine.
+			l.Printf("handling new connection from %s", conn.RemoteAddr())
+			waitGroup.Add(1)
+			go func() {
+				defer waitGroup.Done()
+				l.handleConnection(conn, received)
+				l.Printf("done handling new connection from %s", conn.RemoteAddr())
+			}()
+
+			if l.connLimit > 0 && l.conns >= l.connLimit {
+				l.Printf("reached %d connections, stopping downstream listener", l.conns)
+				break
+			}
 		}
+		// When we've broken out of the loop for any reason (errors, limit),
+		// signal that we're done via the channel.
+		acceptFinished <- true
 	}()
 
-	go reloader.OnRequest(func() uintptr {
-		l.Printf("waiting %s for open connections to finish", shutdownTimeout)
-		WaitWithTimeout(waitGroup, shutdownTimeout)
+	newFd := 0
 
-		l.Printf("closing listening socket for reload")
-		l.Socket.Close()
-		fd := l.Socket.Fd()
+	// Wait for either a shutdown/reload request, or for the Accept() loop to
+	// break on its own (from error or a limit).
+	select {
+	case req := <-done:
 
-		// If we don't dup the fd, the `syscall.Close()` that ends up happening
-		// on it later will prevent us from being able to open it as a socket
-		// in the child process.
-		newfd, _ := syscall.Dup(int(fd))
+		// If we got a reload request, set up a file descriptor to pass to the
+		// reloaded process.
+		if req == Reload {
+			fd, err := l.Socket.Fd()
+			if err != nil {
+				return 0, err
+			}
 
-		// If we don't mark the new fd as CLOEXEC, the child process will
-		// inherit it twice (the second one being the one passed to
-		// ExtraFiles).
-		syscall.CloseOnExec(newfd)
+			// If we don't dup the fd, closing it below (to break the Accept()
+			// loop) will prevent us from being able to use it as a socket in
+			// the child process.
+			newFd, err = syscall.Dup(int(fd))
+			if err != nil {
+				return 0, err
+			}
 
-		close(received)
-
-		return uintptr(newfd)
-	})
-
-	for {
-		conn, err := l.Socket.Accept()
-		if err != nil {
-			l.Printf("error accepting connection: %s", err)
-			break
+			// If we don't mark the new fd as CLOEXEC, the child process will
+			// inherit it twice (the second one being the one passed to
+			// ExtraFiles).
+			syscall.CloseOnExec(newFd)
 		}
 
-		l.conns += 1
-
-		// Handle each incoming connection in its own goroutine.
-		l.Printf("handling new connection from %s", conn.RemoteAddr())
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
-			l.handleConnection(conn, received)
-		}()
-
-		if l.connLimit > 0 && l.conns >= l.connLimit {
-			l.Printf("reached %d connections, stopping downstream listener", l.conns)
-			break
+		l.Printf("closing listening socket")
+		if err := l.Socket.Close(); err != nil {
+			return 0, err
 		}
+
+		// Wait for the Close() to break us out of the Accept() loop.
+		<-acceptFinished
+
+	case <-acceptFinished:
+		// If the accept loop is done on its own (e.g. not from a reload
+		// request), fall through to do some cleanup.
 	}
 
+	// Wait for any open sesssions to finish, or time out.
+	l.Printf("waiting %s for open connections to finish", shutdownTimeout)
+	WaitWithTimeout(waitGroup, shutdownTimeout)
+
+	close(received)
+
 	l.Printf("done listening")
+	return uintptr(newFd), nil
 }
 
 // handleConnection reads SMTP commands from a socket and writes back SMTP

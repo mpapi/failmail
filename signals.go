@@ -14,7 +14,7 @@ const (
 	Reload
 )
 
-func HandleSignals(reqs []chan<- TerminationRequest) {
+func HandleSignals(reqs []chan<- TerminationRequest) bool {
 	signals := make(chan os.Signal, 0)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGUSR1)
 	sig := <-signals
@@ -26,4 +26,5 @@ func HandleSignals(reqs []chan<- TerminationRequest) {
 			req <- GracefulShutdown
 		}
 	}
+	return sig == syscall.SIGUSR1
 }

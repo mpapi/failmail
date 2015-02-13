@@ -2,24 +2,22 @@
 //
 // A zero-downtime reload occurs roughly as follows:
 //
-// * On receipt of SIGUSR1, the signal handlers triggers a flush of message
-//   buffers and shutdown of the sender (this process is identical to that used
-//   for SIGTERM handling).
+// * On receipt of SIGUSR1 or SIGTERM, the signal handler triggers
+//   graceful shutdown of message handling goroutines (waiting until messages
+//   in flight are committed to storage or summarized and sent).
 //
-// * The SIGUSR1 handler also triggers shutdown of the listener, by closing
-//   the listening socket that is blocking on `Accept()`. The listener sends a
-//   reply back to the reloader when it's done, so the reloader can (later)
-//   block until the listening socket is no longer being used. The reply
-//   contains a file descriptor number that should be passed to the new
-//   failmail process so that it can continue listening on the socket.
+// * On shutdown, the listener returns file descriptor that should be passed to
+//   a new failmail process so that it can continue listening on the socket.
+//   Some system calls are made to ensure that that file descriptor (and no
+//   others) are in the right state for seamless inheritance by the child
+//   process.
 //
-// * Before terminating, the reloader is consulted to see if a reload was
-//   requested. If so, it blocks until it receives a file descriptor number
-//   from the listener goroutine, and then executes a new failmail process,
-//   passing it the same arguments it was invoked with, plus the file
-//   descriptor it got from the listener.
+// * If necessary, `TryReload` is called with the file descriptor returned by
+//   the listener, which executes a new failmail process, passing it the same
+//   arguments it was invoked with, plus the file descriptor it got from the
+//   listener.
 //
-// * The process exits, but the now detached child process continues,
+// * The parent process exits, but the now detached child process continues,
 //   inheriting the listening socket and opening it using the file descriptor
 //   number passed on the command line.
 package main
@@ -32,43 +30,18 @@ import (
 	"strings"
 )
 
-// Reloader holds references to channels used for processing a reload request,
-// and tracks the state of whether a reload is necessary. The
-// `ReloadIfNecessary()` method does the heavy lifting of spawning a new child
-// process.
-type Reloader struct {
-	requests    chan bool
-	replies     chan uintptr
-	needsReload bool
-}
-
-func NewReloader() *Reloader {
-	return &Reloader{make(chan bool, 1), make(chan uintptr, 1), false}
-}
-
-func (r *Reloader) RequestReload() {
-	r.needsReload = true
-	r.requests <- true
-}
-
-func (r *Reloader) OnRequest(getFd func() uintptr) {
-	<-r.requests
-	r.replies <- getFd()
-}
-
 // This should be called before shutting down, to check whether the program
 // should invoke a new copy of itself (which will be given the listening TCP
 // socket) before terminating, and to execute that new copy.
-func (r *Reloader) ReloadIfNecessary() error {
-	if !r.needsReload {
+func TryReload(shouldReload bool, fd uintptr) error {
+	if !shouldReload {
 		return nil
 	}
 
-	fd := <-r.replies
-	return r.doReload(fd)
-}
+	if fd == 0 {
+		return fmt.Errorf("reload requested but socket fd was 0")
+	}
 
-func (r *Reloader) doReload(fd uintptr) error {
 	log.Printf("passing socket with fd %d", fd)
 
 	// Remove socket-fd from args.
