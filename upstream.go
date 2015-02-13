@@ -97,6 +97,8 @@ func (s *Sender) Run(outgoing <-chan *SendRequest) {
 	log.Printf("done sending")
 }
 
+// `SendRequest` instructs a `Sender` to send an outgoing message, and gives
+// the requester the opportunity to block on/check for an error response.
 type SendRequest struct {
 	Message    OutgoingMessage
 	SendErrors chan<- error

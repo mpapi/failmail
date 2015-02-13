@@ -152,7 +152,7 @@ func (c *Config) Store() (MessageStore, error) {
 	}
 }
 
-func (c *Config) Listener() (*Listener, error) {
+func (c *Config) MakeReceiver() (*Listener, error) {
 	auth, err := c.Auth()
 	if err != nil {
 		return nil, err
@@ -165,16 +165,14 @@ func (c *Config) Listener() (*Listener, error) {
 
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
-	socket, err := c.Socket()
-	if err != nil {
+	if socket, err := c.Socket(); err != nil {
 		return nil, err
+	} else {
+		return &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig}, nil
 	}
-
-	listener := &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig}
-	return listener, nil
 }
 
-func (c *Config) Writer() (*MessageWriter, error) {
+func (c *Config) MakeWriter() (*MessageWriter, error) {
 	if store, err := c.Store(); err != nil {
 		return nil, err
 	} else {
@@ -182,7 +180,7 @@ func (c *Config) Writer() (*MessageWriter, error) {
 	}
 }
 
-func (c *Config) Buffer() (*MessageBuffer, error) {
+func (c *Config) MakeSummarizer() (*MessageBuffer, error) {
 	if store, err := c.Store(); err != nil {
 		return nil, err
 	} else {

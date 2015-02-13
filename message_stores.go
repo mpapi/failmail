@@ -232,6 +232,8 @@ func (w *MessageWriter) Run(received <-chan *StorageRequest) error {
 	return nil
 }
 
+// `StorageRequest` instructs a store to write an incoming message, and gives
+// the requester the opportunity to block on/check for an error response.
 type StorageRequest struct {
 	Message       *ReceivedMessage
 	StorageErrors chan<- error

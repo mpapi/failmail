@@ -53,12 +53,12 @@ func main() {
 	reloadFd := uintptr(0)
 
 	if config.Receiver {
-		listener, err := config.Listener()
+		listener, err := config.MakeReceiver()
 		if err != nil {
 			log.Fatalf("failed to create listener: %s", err)
 		}
 
-		writer, err := config.Writer()
+		writer, err := config.MakeWriter()
 		if err != nil {
 			log.Fatalf("failed to create writer: %s", err)
 		}
@@ -70,6 +70,7 @@ func main() {
 		done := make(chan TerminationRequest, 1)
 		signalListeners = append(signalListeners, done)
 
+		// Start a goroutine for receiving incoming meSsages.
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
@@ -81,18 +82,22 @@ func main() {
 			}
 		}()
 
+		// Start a goroutine for storing received messages.
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			writer.Run(received)
-			log.Printf("writer: done")
+			if err := writer.Run(received); err != nil {
+				log.Printf("writer failed to shut down cleanly: %s", err)
+			} else {
+				log.Printf("writer: done")
+			}
 		}()
 	}
 
 	if config.Sender {
 		// A `MessageBuffer` collects incoming messages and decides how to batch
 		// them up and when to relay them to an upstream SMTP server.
-		buffer, err := config.Buffer()
+		buffer, err := config.MakeSummarizer()
 		if err != nil {
 			log.Fatalf("failed to create buffer: %s", err)
 		}
@@ -110,6 +115,7 @@ func main() {
 		done := make(chan TerminationRequest, 1)
 		signalListeners = append(signalListeners, done)
 
+		// Start a goroutine for summarizing messages in the store.
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
@@ -117,6 +123,7 @@ func main() {
 			log.Printf("summarizer: done")
 		}()
 
+		// Start a goroutine for sending summarized messages.
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
@@ -129,10 +136,12 @@ func main() {
 		log.Fatalf("must specify --receiver and/or --sender")
 	}
 
-	// Handle signals for reloading/shutdown, wait for goroutines to finish.
+	// Handle signals for reloading/shutdown, then wait for the
+	// message-handling goroutines to finish.
 	shouldReload := HandleSignals(signalListeners)
 	waitGroup.Wait()
 
+	// Reload if necessary.
 	if err := TryReload(shouldReload, reloadFd); err != nil {
 		log.Fatalf("failed to reload: %s", err)
 	}

@@ -14,6 +14,8 @@ const (
 	Reload
 )
 
+// Listens for a SIGTERM or SIGUSR1, forwards it on as a `TerminationRequest`
+// to all subscribers, and returns true if a reload is required.
 func HandleSignals(reqs []chan<- TerminationRequest) bool {
 	signals := make(chan os.Signal, 0)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGUSR1)
