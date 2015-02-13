@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const VERSION = "0.2.0"
+//go:generate ./version.sh
 
 const LOGO = `
      *===================*
