@@ -113,7 +113,7 @@ func main() {
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			buffer.Run(outgoing, done)
+			buffer.Run(config.Poll, outgoing, done)
 			log.Printf("summarizer: done")
 		}()
 

@@ -256,6 +256,24 @@ func (b *MessageBuffer) NeedsFlush(now time.Time, key RecipientKey) bool {
 	return !(now.Sub(b.first[key]) < b.HardLimit && now.Sub(b.last[key]) < b.SoftLimit)
 }
 
+// Periodically calls Flush, and handles shutdown/reload requests.
+func (b *MessageBuffer) Run(pollFrequency time.Duration, outgoing chan<- *SendRequest, done <-chan TerminationRequest) {
+	tick := time.Tick(pollFrequency)
+	for {
+		select {
+		case now := <-tick:
+			b.Flush(now, outgoing, false)
+		case req := <-done:
+			if req == GracefulShutdown {
+				log.Printf("cleaning up")
+				b.Flush(nowGetter(), outgoing, true)
+				close(outgoing)
+				return
+			}
+		}
+	}
+}
+
 func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force bool) {
 
 	// Get messages newer than the last flush.
@@ -379,22 +397,5 @@ func GroupByExpr(name string, expr string) GroupBy {
 		buf := new(bytes.Buffer)
 		err := tmpl.Execute(buf, r.Parsed)
 		return buf.String(), err
-	}
-}
-
-func (b *MessageBuffer) Run(outgoing chan<- *SendRequest, done <-chan TerminationRequest) {
-	tick := time.Tick(5 * time.Second)
-	for {
-		select {
-		case now := <-tick:
-			b.Flush(now, outgoing, false)
-		case req := <-done:
-			if req == GracefulShutdown {
-				log.Printf("cleaning up")
-				b.Flush(nowGetter(), outgoing, true)
-				close(outgoing)
-				return
-			}
-		}
 	}
 }
