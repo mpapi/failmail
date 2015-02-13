@@ -94,7 +94,7 @@ func (c *Config) Upstream() (Upstream, error) {
 	if c.RelayAddr == "debug" {
 		upstream = &DebugUpstream{os.Stdout}
 	} else {
-		upstream = &LiveUpstream{logger("upstream"), c.RelayAddr, c.RelayUser, c.RelayPassword}
+		upstream = &LiveUpstream{c.RelayAddr, c.RelayUser, c.RelayPassword}
 	}
 
 	if c.AllDir != "" {
@@ -168,7 +168,7 @@ func (c *Config) Listener() (*Listener, error) {
 		return nil, err
 	}
 
-	listener := &Listener{Logger: logger("listener"), Socket: socket, Auth: auth, TLSConfig: tlsConfig}
+	listener := &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig}
 	return listener, nil
 }
 

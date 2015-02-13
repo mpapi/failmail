@@ -58,7 +58,7 @@ func TestListener(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
-	listener := &Listener{Logger: testLogger, Socket: socket, connLimit: 1}
+	listener := &Listener{Socket: socket, connLimit: 1}
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 0)
 
@@ -100,7 +100,7 @@ func TestListenerWithMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
-	listener := &Listener{Logger: testLogger, Socket: socket, connLimit: 1}
+	listener := &Listener{Socket: socket, connLimit: 1}
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 0)
 
@@ -145,7 +145,7 @@ func TestListenerWithBadClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
-	l := &Listener{log.New(buf, "", log.LstdFlags), socket, nil, nil, 0, 0}
+	l := &Listener{socket, nil, nil, 0, 0}
 	received := make(chan *StorageRequest, 1)
 	l.handleConnection(BadClient{}, received)
 	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {
@@ -156,7 +156,7 @@ func TestListenerWithBadClient(t *testing.T) {
 func TestListenerWithBadServer(t *testing.T) {
 	buf := new(bytes.Buffer)
 	socket := new(BadServerSocket)
-	l := &Listener{log.New(buf, "", log.LstdFlags), socket, nil, nil, 0, 0}
+	l := &Listener{socket, nil, nil, 0, 0}
 
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 1)
@@ -182,7 +182,7 @@ func TestListenerWithAuth(t *testing.T) {
 		t.Fatalf("failed to create socket")
 	}
 	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
-	listener := &Listener{Logger: testLogger, Socket: socket, connLimit: 1, Auth: auth}
+	listener := &Listener{Socket: socket, connLimit: 1, Auth: auth}
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 0)
 
@@ -219,7 +219,7 @@ func TestListenerWithPartialAuth(t *testing.T) {
 		t.Fatalf("failed to create socket")
 	}
 	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
-	listener := &Listener{Logger: testLogger, Socket: socket, connLimit: 1, Auth: auth}
+	listener := &Listener{Socket: socket, connLimit: 1, Auth: auth}
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 0)
 
@@ -260,7 +260,7 @@ func TestListenerWithTLS(t *testing.T) {
 	if len(certs) == 0 {
 		t.Fatalf("failed to read certificates for TLS test")
 	}
-	listener := &Listener{Logger: testLogger, Socket: socket, connLimit: 1, TLSConfig: &tls.Config{Certificates: certs}}
+	listener := &Listener{Socket: socket, connLimit: 1, TLSConfig: &tls.Config{Certificates: certs}}
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 0)
 

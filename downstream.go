@@ -18,7 +18,6 @@ import (
 // Listener binds a socket on an address, and accepts email messages via SMTP
 // on each incoming connection.
 type Listener struct {
-	*log.Logger
 	Socket    ServerSocket
 	Auth      Auth
 	TLSConfig *tls.Config
@@ -113,7 +112,7 @@ func WaitWithTimeout(waitGroup *sync.WaitGroup, timeout time.Duration) bool {
 // Listens on a TCP port, putting all messages received via SMTP onto the
 // `received` channel.
 func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan TerminationRequest, shutdownTimeout time.Duration) (uintptr, error) {
-	l.Printf("listening: %s", l.Socket)
+	log.Printf("listening: %s", l.Socket)
 
 	waitGroup := new(sync.WaitGroup)
 	acceptFinished := make(chan bool, 0)
@@ -123,23 +122,23 @@ func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan Terminati
 		for {
 			conn, err := l.Socket.Accept()
 			if err != nil {
-				l.Printf("error accepting connection: %s", err)
+				log.Printf("error accepting connection: %s", err)
 				break
 			}
 
 			l.conns += 1
 
 			// Handle each incoming connection in its own goroutine.
-			l.Printf("handling new connection from %s", conn.RemoteAddr())
+			log.Printf("handling new connection from %s", conn.RemoteAddr())
 			waitGroup.Add(1)
 			go func() {
 				defer waitGroup.Done()
 				l.handleConnection(conn, received)
-				l.Printf("done handling new connection from %s", conn.RemoteAddr())
+				log.Printf("done handling new connection from %s", conn.RemoteAddr())
 			}()
 
 			if l.connLimit > 0 && l.conns >= l.connLimit {
-				l.Printf("reached %d connections, stopping downstream listener", l.conns)
+				log.Printf("reached %d connections, stopping downstream listener", l.conns)
 				break
 			}
 		}
@@ -177,7 +176,7 @@ func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan Terminati
 			syscall.CloseOnExec(newFd)
 		}
 
-		l.Printf("closing listening socket")
+		log.Printf("closing listening socket")
 		if err := l.Socket.Close(); err != nil {
 			return 0, err
 		}
@@ -191,12 +190,11 @@ func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan Terminati
 	}
 
 	// Wait for any open sesssions to finish, or time out.
-	l.Printf("waiting %s for open connections to finish", shutdownTimeout)
+	log.Printf("waiting %s for open connections to finish", shutdownTimeout)
 	WaitWithTimeout(waitGroup, shutdownTimeout)
 
 	close(received)
 
-	l.Printf("done listening")
 	return uintptr(newFd), nil
 }
 
@@ -213,19 +211,19 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 
 	session := new(Session)
 	if err := session.Start(l.Auth, l.TLSConfig != nil).WriteTo(writer); err != nil {
-		l.Printf("error writing to client: %s", err)
+		log.Printf("error writing to client: %s", err)
 		return
 	}
 
 	for {
 		resp, err := session.ReadCommand(reader)
 		if err != nil {
-			l.Printf("error reading from client: %s", err)
+			log.Printf("error reading from client: %s", err)
 			break
 		}
 
 		if err := resp.WriteTo(writer); err != nil {
-			l.Printf("error writing to client after reading command: %s", err)
+			log.Printf("error writing to client after reading command: %s", err)
 			break
 		}
 
@@ -235,18 +233,18 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 		case resp.NeedsData():
 			resp, msg := session.ReadData(reader)
 			if msg != nil {
-				l.Printf("received message with subject %#v", msg.Parsed.Header.Get("Subject"))
+				log.Printf("received message with subject %#v", msg.Parsed.Header.Get("Subject"))
 				errors := make(chan error, 0)
 				received <- &StorageRequest{msg, errors}
 				if err := <-errors; err != nil {
 					errorResp := Response{451, err.Error()}
 					if err := errorResp.WriteTo(writer); err != nil {
-						l.Printf("error writing to client after storage failure: %s", err)
+						log.Printf("error writing to client after storage failure: %s", err)
 						break
 					}
 				} else {
 					if err := resp.WriteTo(writer); err != nil {
-						l.Printf("error writing to client after reading data: %s", err)
+						log.Printf("error writing to client after reading data: %s", err)
 						break
 					}
 				}
@@ -254,13 +252,13 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 		case resp.NeedsAuthResponse():
 			resp := session.ReadAuthResponse(reader)
 			if err := resp.WriteTo(writer); err != nil {
-				l.Printf("error writing to client after reading auth: %s", err)
+				log.Printf("error writing to client after reading auth: %s", err)
 				break
 			}
 		case resp.StartsTLS():
 			netConn, ok := conn.(net.Conn)
 			if !ok {
-				l.Printf("error getting underlying connection for STARTTLS")
+				log.Printf("error getting underlying connection for STARTTLS")
 				return
 			}
 			tlsConn := tls.Server(netConn, l.TLSConfig)

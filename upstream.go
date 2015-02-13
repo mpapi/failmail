@@ -18,7 +18,6 @@ type Upstream interface {
 // A `LiveUpstream` represents an upstream SMTP server that we can connect to
 // for sending email messages.
 type LiveUpstream struct {
-	*log.Logger
 	Addr string
 
 	// Used for PLAIN auth if non-empty.
@@ -39,7 +38,7 @@ func (u *LiveUpstream) auth() smtp.Auth {
 func (u *LiveUpstream) Send(m OutgoingMessage) error {
 	from := m.Sender()
 	to := m.Recipients()
-	u.Printf("sending message to %v", to)
+	log.Printf("sending message to %v", to)
 	auth := u.auth()
 	return smtp.SendMail(u.Addr, auth, from, to, m.Contents())
 }

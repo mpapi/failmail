@@ -21,6 +21,11 @@ const LOGO = `
   |/_______________________\|
 `
 
+func init() {
+	log.SetPrefix(fmt.Sprintf("%d ", os.Getpid()))
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
+}
+
 func main() {
 	config := Defaults()
 

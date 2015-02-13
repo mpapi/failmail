@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
 func ListenHTTP(bind string, buffer *MessageBuffer) {
-	log := logger("http")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if stats, err := json.Marshal(buffer.Stats()); err == nil {
 			fmt.Fprintf(w, "%s\n", stats)
