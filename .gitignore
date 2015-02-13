@@ -26,5 +26,3 @@ _testmain.go
 *.exe
 *.test
 *.prof
-
-version.go
