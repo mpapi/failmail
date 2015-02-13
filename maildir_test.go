@@ -145,6 +145,27 @@ func TestReadBytes(t *testing.T) {
 	}
 }
 
+func TestRemove(t *testing.T) {
+	m, cleanup := makeTestMaildir(t)
+	defer cleanup()
+
+	defer patchHost("test", nil)()
+	defer patchTime(time.Unix(1393650000, 0))()
+	defer patchPid(1000)()
+
+	if name, err := m.Write([]byte("test mail")); err != nil {
+		t.Errorf("couldn't write to maildir: %s", err)
+	} else if bytes, err := m.ReadBytes(name, MAILDIR_CUR); err != nil || len(bytes) != 9 {
+		t.Errorf("failed to read data back from maildir: size %d, error %s", len(bytes), err)
+	} else if err := m.Remove(name, MAILDIR_CUR); err != nil {
+		t.Errorf("failed to remove data from maildir: %s", err)
+	} else if items, err := m.List(MAILDIR_CUR); err != nil {
+		t.Fatalf("failed to list contents of maildir: %s", err)
+	} else if count := len(items); count != 0 {
+		t.Errorf("Remove() didn't remove message from maildir")
+	}
+}
+
 func makeTestMaildir(t *testing.T) (*Maildir, func()) {
 	tmp, err := ioutil.TempDir("", "maildir")
 	if err != nil {

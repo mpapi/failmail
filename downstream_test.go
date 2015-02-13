@@ -95,6 +95,110 @@ func TestListener(t *testing.T) {
 	<-done
 }
 
+func TestListenerWithFileSocket(t *testing.T) {
+	tcpSocket, err := NewTCPServerSocket("localhost:40040")
+	if err != nil {
+		t.Fatalf("failed to create TCP socket: %s", err)
+	}
+
+	fd, err := tcpSocket.Fd()
+	if err != nil {
+		t.Fatalf("failed to get file descriptor from TCP socket: %s", err)
+	}
+
+	socket, err := NewFileServerSocket(fd)
+	if err != nil {
+		t.Fatalf("failed to create socket from fd: %s", err)
+	}
+
+	listener := &Listener{Socket: socket, connLimit: 1}
+	received := make(chan *StorageRequest, 1)
+	done := make(chan bool, 0)
+
+	go func() {
+		conn, err := textproto.Dial("tcp", "localhost:40040")
+		if err != nil {
+			t.Fatalf("failed to connect to listener: %s", err)
+		}
+
+		_, _, err = conn.ReadCodeLine(220)
+		if err != nil {
+			t.Errorf("unexpected response from server: %s", err)
+		}
+
+		err = conn.PrintfLine("QUIT")
+		if err != nil {
+			t.Errorf("unexpected error writing to server: %s", err)
+		}
+
+		_, _, err = conn.ReadCodeLine(221)
+		if err != nil {
+			t.Errorf("unexpected response from server: %s", err)
+		}
+
+		err = conn.Close()
+		if err != nil {
+			t.Errorf("failed to close listener: %s", err)
+		}
+
+		done <- true
+	}()
+
+	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
+	<-done
+}
+
+func TestListenerShutdown(t *testing.T) {
+	socket, err := NewTCPServerSocket("localhost:40041")
+	if err != nil {
+		t.Fatalf("failed to create TCP socket: %s", err)
+	}
+
+	listener := &Listener{Socket: socket}
+	received := make(chan *StorageRequest, 1)
+	shutdown := make(chan TerminationRequest, 0)
+	done := make(chan bool, 0)
+
+	go func() {
+		conn, err := textproto.Dial("tcp", "localhost:40041")
+		if err != nil {
+			t.Fatalf("failed to connect to listener: %s", err)
+		}
+
+		_, _, err = conn.ReadCodeLine(220)
+		if err != nil {
+			t.Errorf("unexpected response from server: %s", err)
+		}
+
+		shutdown <- Reload
+
+		err = conn.PrintfLine("QUIT")
+		if err != nil {
+			t.Errorf("unexpected error writing to server: %s", err)
+		}
+
+		_, _, err = conn.ReadCodeLine(221)
+		if err != nil {
+			t.Errorf("unexpected response from server: %s", err)
+		}
+
+		err = conn.Close()
+		if err != nil {
+			t.Errorf("failed to close listener: %s", err)
+		}
+
+		done <- true
+	}()
+
+	if fd, err := listener.Listen(received, shutdown, 1*time.Second); err != nil {
+		t.Fatalf("unexpected error returned from Listen(): %s", err)
+	} else if fd <= 0 {
+		t.Fatalf("unexpected file descriptor returned from Listen(): %d", fd)
+	}
+
+	<-done
+}
+
 func TestListenerWithMessage(t *testing.T) {
 	socket, err := NewTCPServerSocket("localhost:40026")
 	if err != nil {
