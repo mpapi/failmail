@@ -8,6 +8,7 @@ type Parser func(string) *p.Node
 
 func SMTPParser() func(string) *p.Node {
 	space := p.Regexp(`\s+`)
+	maybeSpace := p.Regexp(`\s*`)
 	name := p.Regexp(`[a-zA-Z]([a-zA-Z0-9-]*[a-zA-Z0-9])?`)
 
 	domain := p.Any()
@@ -42,8 +43,8 @@ func SMTPParser() func(string) *p.Node {
 
 	// RFC 821
 	helo := Line(Command("HELO"), space, p.Label("domain", domain))
-	mail := Line(Command("MAIL"), space, p.ILiteral("FROM:"), p.Label("path", reversePath))
-	rcpt := Line(Command("RCPT"), space, p.ILiteral("TO:"), p.Label("path", path))
+	mail := Line(Command("MAIL"), space, p.ILiteral("FROM:"), maybeSpace, p.Label("path", reversePath))
+	rcpt := Line(Command("RCPT"), space, p.ILiteral("TO:"), maybeSpace, p.Label("path", path))
 	data := Line(Command("DATA"))
 	rset := Line(Command("RSET"))
 	noop := Line(Command("NOOP"))
