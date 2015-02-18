@@ -249,7 +249,7 @@ func TestListenerWithBadClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
-	l := &Listener{socket, nil, nil, 0, 0}
+	l := &Listener{socket, nil, nil, false, 0, 0}
 	received := make(chan *StorageRequest, 1)
 	l.handleConnection(BadClient{}, received)
 	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {
@@ -260,7 +260,7 @@ func TestListenerWithBadClient(t *testing.T) {
 func TestListenerWithBadServer(t *testing.T) {
 	buf := new(bytes.Buffer)
 	socket := new(BadServerSocket)
-	l := &Listener{socket, nil, nil, 0, 0}
+	l := &Listener{socket, nil, nil, false, 0, 0}
 
 	received := make(chan *StorageRequest, 1)
 	done := make(chan bool, 1)

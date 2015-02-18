@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/base64"
 	"fmt"
 	"github.com/hut8labs/failmail/parse"
+	"log"
 	"net/mail"
 	"regexp"
 	"strings"
@@ -34,7 +34,7 @@ func (r Response) StartsTLS() bool {
 	return r.Text == "Ready to switch to TLS"
 }
 
-func (r Response) WriteTo(writer *bufio.Writer) error {
+func (r Response) WriteTo(writer stringWriter) error {
 	text := strings.TrimSpace(r.Text)
 	lines := strings.Split(text, "\r\n")
 	if len(lines) > 1 {
@@ -57,6 +57,37 @@ func (r Response) WriteTo(writer *bufio.Writer) error {
 
 type stringReader interface {
 	ReadString(delim byte) (string, error)
+}
+
+type debugReader struct {
+	Reader stringReader
+	Prefix string
+}
+
+func (r *debugReader) ReadString(delim byte) (string, error) {
+	result, err := r.Reader.ReadString(delim)
+	log.Printf("%s<<< %#v %v", r.Prefix, result, err)
+	return result, err
+}
+
+type stringWriter interface {
+	WriteString(string) (int, error)
+	Flush() error
+}
+
+type debugWriter struct {
+	Writer stringWriter
+	Prefix string
+}
+
+func (w *debugWriter) WriteString(str string) (int, error) {
+	log.Printf("%s>>> %#v", w.Prefix, str)
+	return w.Writer.WriteString(str)
+}
+
+func (w *debugWriter) Flush() error {
+	log.Printf("%s>>> (FLUSH)", w.Prefix)
+	return w.Writer.Flush()
 }
 
 type Auth interface {

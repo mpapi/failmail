@@ -21,6 +21,7 @@ type Listener struct {
 	Socket    ServerSocket
 	Auth      Auth
 	TLSConfig *tls.Config
+	Debug     bool
 	conns     int
 	connLimit int
 }
@@ -206,8 +207,20 @@ func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan Terminati
 func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *StorageRequest) {
 	defer conn.Close()
 
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
+	origReader := bufio.NewReader(conn)
+	origWriter := bufio.NewWriter(conn)
+
+	// In debug mode, wrap the readers and writers.
+	var reader stringReader
+	var writer stringWriter
+	if l.Debug {
+		prefix := fmt.Sprintf("%v ", conn)
+		reader = &debugReader{origReader, prefix}
+		writer = &debugWriter{origWriter, prefix}
+	} else {
+		reader = origReader
+		writer = origWriter
+	}
 
 	session := new(Session)
 	if err := session.Start(l.Auth, l.TLSConfig != nil).WriteTo(writer); err != nil {
@@ -262,8 +275,8 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 				return
 			}
 			tlsConn := tls.Server(netConn, l.TLSConfig)
-			reader.Reset(tlsConn)
-			writer.Reset(tlsConn)
+			origReader.Reset(tlsConn)
+			origWriter.Reset(tlsConn)
 			defer tlsConn.Close()
 		}
 	}

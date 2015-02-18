@@ -17,6 +17,7 @@ type Config struct {
 	TlsCert         string        `help:"PEM certificate file for TLS"`
 	TlsKey          string        `help:"PEM key file for TLS"`
 	ShutdownTimeout time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
+	DebugReceiver   bool          `help:"log traffic sent to and from downstream connections"`
 
 	// Options for storing messages.
 	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
@@ -168,7 +169,7 @@ func (c *Config) MakeReceiver() (*Listener, error) {
 	if socket, err := c.Socket(); err != nil {
 		return nil, err
 	} else {
-		return &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig}, nil
+		return &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig, Debug: c.DebugReceiver}, nil
 	}
 }
 
