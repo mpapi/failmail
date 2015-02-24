@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/textproto"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +24,7 @@ func (b BadClient) Read(p []byte) (int, error) {
 }
 
 func (b BadClient) Write(p []byte) (int, error) {
-	return 0, nil
+	return len(p), nil
 }
 
 func (b BadClient) Close() error {
@@ -54,49 +55,23 @@ func (b *BadServerSocket) String() string {
 }
 
 func TestListener(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:40025")
+	socket, err := NewTCPServerSocket("localhost:10025")
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
-	listener := &Listener{Socket: socket, connLimit: 1}
+	defer socket.Close()
+
+	listener := &Listener{Socket: socket}
+	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 0)
 
-	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40025")
-		if err != nil {
-			t.Fatalf("failed to connect to listener: %s", err)
-		}
+	go dialAndShutdown(t, "localhost:10025", shutdown)
 
-		_, _, err = conn.ReadCodeLine(220)
-		if err != nil {
-			t.Errorf("unexpected response from server: %s", err)
-		}
-
-		err = conn.PrintfLine("QUIT")
-		if err != nil {
-			t.Errorf("unexpected error writing to server: %s", err)
-		}
-
-		_, _, err = conn.ReadCodeLine(221)
-		if err != nil {
-			t.Errorf("unexpected response from server: %s", err)
-		}
-
-		err = conn.Close()
-		if err != nil {
-			t.Errorf("failed to close listener: %s", err)
-		}
-
-		done <- true
-	}()
-
-	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
-	<-done
+	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func TestListenerWithFileSocket(t *testing.T) {
-	tcpSocket, err := NewTCPServerSocket("localhost:40040")
+	tcpSocket, err := NewTCPServerSocket("localhost:10040")
 	if err != nil {
 		t.Fatalf("failed to create TCP socket: %s", err)
 	}
@@ -110,84 +85,30 @@ func TestListenerWithFileSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create socket from fd: %s", err)
 	}
-
-	listener := &Listener{Socket: socket, connLimit: 1}
-	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 0)
-
-	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40040")
-		if err != nil {
-			t.Fatalf("failed to connect to listener: %s", err)
-		}
-
-		_, _, err = conn.ReadCodeLine(220)
-		if err != nil {
-			t.Errorf("unexpected response from server: %s", err)
-		}
-
-		err = conn.PrintfLine("QUIT")
-		if err != nil {
-			t.Errorf("unexpected error writing to server: %s", err)
-		}
-
-		_, _, err = conn.ReadCodeLine(221)
-		if err != nil {
-			t.Errorf("unexpected response from server: %s", err)
-		}
-
-		err = conn.Close()
-		if err != nil {
-			t.Errorf("failed to close listener: %s", err)
-		}
-
-		done <- true
-	}()
-
-	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
-	<-done
-}
-
-func TestListenerShutdown(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:40041")
-	if err != nil {
-		t.Fatalf("failed to create TCP socket: %s", err)
-	}
+	defer socket.Close()
 
 	listener := &Listener{Socket: socket}
-	received := make(chan *StorageRequest, 1)
 	shutdown := make(chan TerminationRequest, 0)
-	done := make(chan bool, 0)
+	received := make(chan *StorageRequest, 1)
+
+	go dialAndShutdown(t, "localhost:10040", shutdown)
+
+	listener.Listen(received, shutdown, 100*time.Millisecond)
+}
+
+func TestListenerReload(t *testing.T) {
+	socket, err := NewTCPServerSocket("localhost:10041")
+	if err != nil {
+		t.Fatalf("failed to create socket")
+	}
+	defer socket.Close()
+
+	listener := &Listener{Socket: socket}
+	shutdown := make(chan TerminationRequest, 0)
+	received := make(chan *StorageRequest, 1)
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40041")
-		if err != nil {
-			t.Fatalf("failed to connect to listener: %s", err)
-		}
-
-		_, _, err = conn.ReadCodeLine(220)
-		if err != nil {
-			t.Errorf("unexpected response from server: %s", err)
-		}
-
 		shutdown <- Reload
-
-		err = conn.PrintfLine("QUIT")
-		if err != nil {
-			t.Errorf("unexpected error writing to server: %s", err)
-		}
-
-		_, _, err = conn.ReadCodeLine(221)
-		if err != nil {
-			t.Errorf("unexpected response from server: %s", err)
-		}
-
-		err = conn.Close()
-		if err != nil {
-			t.Errorf("failed to close listener: %s", err)
-		}
-
-		done <- true
 	}()
 
 	if fd, err := listener.Listen(received, shutdown, 1*time.Second); err != nil {
@@ -195,18 +116,18 @@ func TestListenerShutdown(t *testing.T) {
 	} else if fd <= 0 {
 		t.Fatalf("unexpected file descriptor returned from Listen(): %d", fd)
 	}
-
-	<-done
 }
 
 func TestListenerWithMessage(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:40026")
+	socket, err := NewTCPServerSocket("localhost:10026")
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
-	listener := &Listener{Socket: socket, connLimit: 1}
+	defer socket.Close()
+
+	listener := &Listener{Socket: socket}
+	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 0)
 
 	go func() {
 		req := <-received
@@ -214,13 +135,12 @@ func TestListenerWithMessage(t *testing.T) {
 	}()
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40026")
+		conn, err := textproto.Dial("tcp", "localhost:10026")
 		if err != nil {
 			t.Fatalf("failed to connect to listener: %s", err)
 		}
 
-		_, _, err = conn.ReadCodeLine(220)
-		if err != nil {
+		if _, _, err := conn.ReadCodeLine(220); err != nil {
 			t.Errorf("unexpected response from server: %s", err)
 		}
 
@@ -231,67 +151,59 @@ func TestListenerWithMessage(t *testing.T) {
 		sendAndExpect(conn, t, "Subject: test\r\n\r\nbody\r\n.", 250)
 		sendAndExpect(conn, t, "QUIT", 221)
 
-		err = conn.Close()
-		if err != nil {
+		if err := conn.Close(); err != nil {
 			t.Errorf("failed to close listener: %s", err)
 		}
 
-		done <- true
+		shutdown <- GracefulShutdown
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
-	<-done
+	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func TestListenerWithBadClient(t *testing.T) {
 	buf := new(bytes.Buffer)
-	socket, err := NewTCPServerSocket("localhost:40027")
-	if err != nil {
-		t.Fatalf("failed to create socket")
-	}
-	l := &Listener{socket, nil, nil, false, 0, 0}
+	log.SetOutput(buf)
+	defer log.SetOutput(os.Stderr)
+
+	l := &Listener{}
 	received := make(chan *StorageRequest, 1)
 	l.handleConnection(BadClient{}, received)
-	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "bad read from bad client") {
+	if msg := string(buf.Bytes()); !strings.Contains(msg, "bad read from bad client") {
 		t.Errorf("bad client didn't trigger failure in handleConnection(): %#v", msg)
 	}
 }
 
 func TestListenerWithBadServer(t *testing.T) {
 	buf := new(bytes.Buffer)
+	log.SetOutput(buf)
+	defer log.SetOutput(os.Stderr)
+
 	socket := new(BadServerSocket)
-	l := &Listener{socket, nil, nil, false, 0, 0}
+	l := &Listener{Socket: socket}
 
 	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 1)
-	go func() {
-		l.Listen(received, make(chan TerminationRequest, 0), 1*time.Millisecond)
-		done <- true
-	}()
+	l.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
 
-	select {
-	case <-time.Tick(1 * time.Second):
-		t.Errorf("timed out")
-	case <-done:
-	}
-
-	if msg := string(buf.Bytes()); strings.HasSuffix(msg, "error accepting connection") {
+	if msg := string(buf.Bytes()); !strings.Contains(msg, "bad accept") {
 		t.Errorf("bad socket Accept() didn't trigger failure in Listen(): %#v", msg)
 	}
 }
 
 func TestListenerWithAuth(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:40028")
+	socket, err := NewTCPServerSocket("localhost:10028")
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
+	defer socket.Close()
+
 	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
-	listener := &Listener{Socket: socket, connLimit: 1, Auth: auth}
+	listener := &Listener{Socket: socket, Auth: auth}
+	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 0)
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40028")
+		conn, err := textproto.Dial("tcp", "localhost:10028")
 		if err != nil {
 			t.Fatalf("failed to connect to listener: %s", err)
 		}
@@ -310,25 +222,26 @@ func TestListenerWithAuth(t *testing.T) {
 			t.Errorf("failed to close listener: %s", err)
 		}
 
-		done <- true
+		shutdown <- GracefulShutdown
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
-	<-done
+	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func TestListenerWithPartialAuth(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:40029")
+	socket, err := NewTCPServerSocket("localhost:10029")
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
+	defer socket.Close()
+
 	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
-	listener := &Listener{Socket: socket, connLimit: 1, Auth: auth}
+	listener := &Listener{Socket: socket, Auth: auth}
+	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 0)
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:40029")
+		conn, err := textproto.Dial("tcp", "localhost:10029")
 		if err != nil {
 			t.Fatalf("failed to connect to listener: %s", err)
 		}
@@ -348,28 +261,29 @@ func TestListenerWithPartialAuth(t *testing.T) {
 			t.Errorf("failed to close listener: %s", err)
 		}
 
-		done <- true
+		shutdown <- GracefulShutdown
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
-	<-done
+	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func TestListenerWithTLS(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:40030")
+	socket, err := NewTCPServerSocket("localhost:10030")
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
+	defer socket.Close()
+
 	certs := buildCerts()
 	if len(certs) == 0 {
 		t.Fatalf("failed to read certificates for TLS test")
 	}
-	listener := &Listener{Socket: socket, connLimit: 1, TLSConfig: &tls.Config{Certificates: certs}}
+	listener := &Listener{Socket: socket, TLSConfig: &tls.Config{Certificates: certs}}
+	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
-	done := make(chan bool, 0)
 
 	go func() {
-		rawConn, err := net.Dial("tcp", "localhost:40030")
+		rawConn, err := net.Dial("tcp", "localhost:10030")
 		if err != nil {
 			t.Fatalf("failed to connect to listener: %s", err)
 		}
@@ -386,16 +300,14 @@ func TestListenerWithTLS(t *testing.T) {
 		conn = textproto.NewConn(tls.Client(rawConn, &tls.Config{InsecureSkipVerify: true}))
 		sendAndExpect(conn, t, "QUIT", 221)
 
-		err = conn.Close()
-		if err != nil {
+		if err := conn.Close(); err != nil {
 			t.Errorf("failed to close listener: %s", err)
 		}
 
-		done <- true
+		shutdown <- GracefulShutdown
 	}()
 
-	listener.Listen(received, make(chan TerminationRequest, 0), 100*time.Millisecond)
-	<-done
+	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func sendAndExpect(conn *textproto.Conn, t *testing.T, line string, code int) {
@@ -452,4 +364,29 @@ sPkw89IcP2dHtwIgduZOwHZ54Ma3P6zczgqFlCCoa2AMmsMh2B32wSvzlyUCIDnu
 		return []tls.Certificate{}
 	}
 	return []tls.Certificate{cert}
+}
+
+func dialAndShutdown(t *testing.T, addr string, shutdown chan<- TerminationRequest) {
+	conn, err := textproto.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("failed to connect to listener: %s", err)
+	}
+
+	if _, _, err := conn.ReadCodeLine(220); err != nil {
+		t.Errorf("unexpected response from server: %s", err)
+	}
+
+	if err := conn.PrintfLine("QUIT"); err != nil {
+		t.Errorf("unexpected error writing to server: %s", err)
+	}
+
+	if _, _, err := conn.ReadCodeLine(221); err != nil {
+		t.Errorf("unexpected response from server: %s", err)
+	}
+
+	if err := conn.Close(); err != nil {
+		t.Errorf("failed to close listener: %s", err)
+	}
+
+	shutdown <- GracefulShutdown
 }

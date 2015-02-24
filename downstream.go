@@ -23,7 +23,6 @@ type Listener struct {
 	TLSConfig *tls.Config
 	Debug     bool
 	conns     int
-	connLimit int
 }
 
 // ServerSocket is a `net.Listener` that can return its file descriptor.
@@ -137,11 +136,6 @@ func (l *Listener) Listen(received chan<- *StorageRequest, done <-chan Terminati
 				l.handleConnection(conn, received)
 				log.Printf("done handling new connection from %s", conn.RemoteAddr())
 			}()
-
-			if l.connLimit > 0 && l.conns >= l.connLimit {
-				log.Printf("reached %d connections, stopping downstream listener", l.conns)
-				break
-			}
 		}
 		// When we've broken out of the loop for any reason (errors, limit),
 		// signal that we're done via the channel.
