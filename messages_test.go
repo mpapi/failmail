@@ -73,8 +73,10 @@ func TestReceivedMessageOutgoing(t *testing.T) {
 func TestCompact(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
-	uniques := Compact(GroupByExpr("batch", `{{.Header.Get "Subject"}}`), makeStoredMessages(msg1, msg2))
-	if count := len(uniques); count != 1 {
+	uniques, err := Compact(GroupByExpr("batch", `{{.Header.Get "Subject"}}`), makeStoredMessages(msg1, msg2))
+	if err != nil {
+		t.Errorf("unexpected error in Compact(): %s", err)
+	} else if count := len(uniques); count != 1 {
 		t.Errorf("expected one unique message from Compact(), got %d", count)
 	}
 
@@ -101,9 +103,11 @@ func TestSummarize(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test 2\r\n\r\ntest body 2\r\n")
 
-	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
+	summarized, err := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
 
-	if summarized.From != "failmail@example.com" {
+	if err != nil {
+		t.Errorf("unexpected error in Summarize(): %s", err)
+	} else if summarized.From != "failmail@example.com" {
 		t.Errorf("unexpected from address from Summarize(): %s", summarized.From)
 	}
 	if !reflect.DeepEqual(summarized.To, []string{"test2@example.com"}) {
@@ -286,7 +290,10 @@ func TestTemplateRenderer(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
 
-	summarized := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
+	summarized, err := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
+	if err != nil {
+		t.Errorf("unexpected error in Summarize(): %s", err)
+	}
 
 	templ := template.Must(template.New("summary").Parse("{{ range .UniqueMessages }}{{ .Count }} instances of {{ .Subject }}{{ end }}\n"))
 	renderer := &TemplateRenderer{templ}

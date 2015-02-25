@@ -89,11 +89,14 @@ type UniqueMessage struct {
 // `Compact` returns a `UniqueMessage` for each distinct key among the received
 // messages, using the regular expression `sanitize` to create a representative
 // template body for the `UniqueMessage`.
-func Compact(group GroupBy, stored []*StoredMessage) []*UniqueMessage {
+func Compact(group GroupBy, stored []*StoredMessage) ([]*UniqueMessage, error) {
 	uniques := make(map[string]*UniqueMessage)
 	result := make([]*UniqueMessage, 0)
 	for _, msg := range stored {
-		key, _ := group(msg.ReceivedMessage)
+		key, err := group(msg.ReceivedMessage)
+		if err != nil {
+			return result, err
+		}
 
 		if _, ok := uniques[key]; !ok {
 			unique := &UniqueMessage{Template: key}
@@ -112,14 +115,14 @@ func Compact(group GroupBy, stored []*StoredMessage) []*UniqueMessage {
 		}
 		body, err := msg.ReadBody()
 		if err != nil {
-			log.Printf("failed to read body from message: %s", err)
+			return result, err
 		}
 
 		unique.Body = body
 		unique.Subject = msg.Parsed.Header.Get("subject")
 		unique.Count += 1
 	}
-	return result
+	return result, nil
 }
 
 // A `SummaryMessage` is the result of rolling together several
@@ -199,9 +202,12 @@ func (s *SummaryMessage) Contents() []byte {
 	return buf.Bytes()
 }
 
-func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) *SummaryMessage {
-	uniques := Compact(group, stored)
+func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) (*SummaryMessage, error) {
 	result := &SummaryMessage{}
+	uniques, err := Compact(group, stored)
+	if err != nil {
+		return result, err
+	}
 
 	result.From = from
 	result.To = []string{to}
@@ -217,7 +223,7 @@ func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) *
 
 	result.StoredMessages = stored
 	result.UniqueMessages = uniques
-	return result
+	return result, nil
 }
 
 type MessageBuffer struct {
@@ -271,11 +277,17 @@ func (b *MessageBuffer) Run(pollFrequency time.Duration, outgoing chan<- *SendRe
 	for {
 		select {
 		case now := <-tick:
-			b.Flush(now, outgoing, false)
+			err := b.Flush(now, outgoing, false)
+			if err != nil {
+				log.Printf("warning: failed to flush: %s", err)
+			}
 		case req := <-done:
 			if req == GracefulShutdown {
 				log.Printf("cleaning up")
-				b.Flush(nowGetter(), outgoing, true)
+				err := b.Flush(nowGetter(), outgoing, true)
+				if err != nil {
+					log.Printf("warning: failed to flush: %s", err)
+				}
 				close(outgoing)
 				return
 			}
@@ -283,12 +295,20 @@ func (b *MessageBuffer) Run(pollFrequency time.Duration, outgoing chan<- *SendRe
 	}
 }
 
-func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force bool) {
-
+func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force bool) error {
 	// Get messages newer than the last flush.
-	stored, _ := b.Store.MessagesNewerThan(b.lastFlush)
+	stored, err := b.Store.MessagesNewerThan(b.lastFlush)
+	if err != nil {
+		return err
+	}
+
 	for _, s := range stored {
-		key, _ := b.Batch(s.ReceivedMessage)
+		key, err := b.Batch(s.ReceivedMessage)
+		if err != nil {
+			log.Printf("warning: error batching message with id %s: %s", s.Id, err)
+			continue
+		}
+
 		for _, to := range s.Recipients() {
 			recipKey := RecipientKey{key, NormalizeAddress(to)}
 			b.Add(recipKey, s)
@@ -301,7 +321,10 @@ func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force
 	// Summarize message groups that are due to be sent.
 	for key, msgs := range b.messages {
 		if force || b.NeedsFlush(now, key) {
-			summary := Summarize(b.Group, b.From, key.Recipient, msgs)
+			summary, err := Summarize(b.Group, b.From, key.Recipient, msgs)
+			if err != nil {
+				log.Printf("warning: error summarizing messages with key %s: %s", key, err)
+			}
 
 			sendErrors := make(chan error, 0)
 			outgoing <- &SendRequest{b.Renderer.Render(summary), sendErrors}
@@ -317,18 +340,22 @@ func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force
 				}
 				b.Remove(key)
 			}
-
 		}
 	}
 
 	// Remove any that were summarized.
 	for id, _ := range toRemove {
+		// Skip those we explicitly need to keep.
+		if _, ok := toKeep[id]; ok {
+			continue
+		}
 		if err := b.Store.Remove(id); err != nil {
-			log.Printf("failed to remove message from store: %s", err)
+			log.Printf("warning: error remove message with id %s: %s", id, err)
 		}
 	}
 
 	b.lastFlush = now
+	return nil
 }
 
 func NormalizeAddress(email string) string {

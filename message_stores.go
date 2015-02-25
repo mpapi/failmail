@@ -36,7 +36,7 @@ type MessageStore interface {
 	Remove(MessageId) error
 
 	// Returns the messages in the store that are newer than the given time.
-	MessagesNewerThan(time.Time) ([]*StoredMessage, []error)
+	MessagesNewerThan(time.Time) ([]*StoredMessage, error)
 }
 
 // `DiskStore` is a `MessageStore` implementation backed by a Maildir on disk.
@@ -81,33 +81,28 @@ func (s *DiskStore) Remove(id MessageId) error {
 	return s.Maildir.Remove(name, MAILDIR_CUR)
 }
 
-func (s *DiskStore) MessagesNewerThan(t time.Time) ([]*StoredMessage, []error) {
+func (s *DiskStore) MessagesNewerThan(t time.Time) ([]*StoredMessage, error) {
 	// List the metadata files. These are written last and deleted first, so
 	// there should always be a message file for each metadata file (but not
 	// necessarily the other way around).
 	files, err := s.Maildir.List(MAILDIR_META)
 	if err != nil {
-		return nil, []error{err}
+		return nil, err
 	}
 
 	result := make([]*StoredMessage, 0, len(files))
-	errors := make([]error, 0)
 	for _, info := range files {
 		if info.ModTime().Before(t) || info.IsDir() {
 			continue
 		}
 		if msg, err := s.readMessage(info.Name()); err != nil {
-			errors = append(errors, err)
-			continue
+			return result, err
 		} else {
 			result = append(result, &StoredMessage{info.Name(), info.ModTime(), msg})
 		}
 	}
-	if len(errors) == 0 {
-		return result, nil
-	} else {
-		return result, errors
-	}
+
+	return result, nil
 }
 
 // Reads the metadata file corresponding to the message with contents in
@@ -211,7 +206,7 @@ func (s *MemoryStore) Remove(id MessageId) error {
 	return nil
 }
 
-func (s *MemoryStore) MessagesNewerThan(t time.Time) ([]*StoredMessage, []error) {
+func (s *MemoryStore) MessagesNewerThan(t time.Time) ([]*StoredMessage, error) {
 	i := sort.Search(len(*s.messages), func(k int) bool {
 		return t.UnixNano() >= (*s.messages)[k].Received.UnixNano()
 	})

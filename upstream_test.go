@@ -211,6 +211,10 @@ func makeSummaryMessage(t *testing.T, data ...string) *SummaryMessage {
 		msgs = append(msgs, makeReceivedMessage(t, d))
 	}
 	stored := makeStoredMessages(msgs...)
+	compacted, err := Compact(GroupByExpr("group", `{{.Header.Get "Subject"}}`), stored)
+	if err != nil {
+		t.Fatalf("error in Compact(): %s", err)
+	}
 
 	return &SummaryMessage{
 		From:           "test@example.com",
@@ -218,6 +222,6 @@ func makeSummaryMessage(t *testing.T, data ...string) *SummaryMessage {
 		Subject:        "test",
 		Date:           time.Now(),
 		StoredMessages: stored,
-		UniqueMessages: Compact(GroupByExpr("group", `{{.Header.Get "Subject"}}`), stored),
+		UniqueMessages: compacted,
 	}
 }
