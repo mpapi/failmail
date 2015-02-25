@@ -54,24 +54,59 @@ func (b *BadServerSocket) String() string {
 	return "bad"
 }
 
-func TestListener(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:10025")
-	if err != nil {
-		t.Fatalf("failed to create socket")
+type MockServerSocket struct {
+	conns  []net.Conn
+	closes chan bool
+}
+
+func NewMockSocket() (*MockServerSocket, net.Conn) {
+	server, client := net.Pipe()
+	socket := &MockServerSocket{[]net.Conn{server}, make(chan bool, 0)}
+
+	return socket, client
+}
+
+func (m *MockServerSocket) Accept() (net.Conn, error) {
+	if len(m.conns) == 0 {
+		<-m.closes
+		return nil, fmt.Errorf("no more connections")
 	}
-	defer socket.Close()
+	conn := m.conns[0]
+	m.conns = append(m.conns[:0], m.conns[1:]...)
+	return conn, nil
+}
+
+func (m *MockServerSocket) Addr() net.Addr {
+	return nil
+}
+
+func (m *MockServerSocket) Close() error {
+	m.closes <- true
+	return nil
+}
+
+func (m *MockServerSocket) Fd() (uintptr, error) {
+	return 99, nil
+}
+
+func (m *MockServerSocket) String() string {
+	return "mock"
+}
+
+func TestListener(t *testing.T) {
+	socket, client := NewMockSocket()
 
 	listener := &Listener{Socket: socket}
 	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
 
-	go dialAndShutdown(t, "localhost:10025", shutdown)
+	go connectAndShutdown(t, textproto.NewConn(client), shutdown, GracefulShutdown)
 
 	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func TestListenerWithFileSocket(t *testing.T) {
-	tcpSocket, err := NewTCPServerSocket("localhost:10040")
+	tcpSocket, err := NewTCPServerSocket("localhost:10010")
 	if err != nil {
 		t.Fatalf("failed to create TCP socket: %s", err)
 	}
@@ -87,17 +122,17 @@ func TestListenerWithFileSocket(t *testing.T) {
 	}
 	defer socket.Close()
 
-	listener := &Listener{Socket: socket}
+	listener := &Listener{Socket: socket, Debug: true}
 	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
 
-	go dialAndShutdown(t, "localhost:10040", shutdown)
+	go dialAndShutdown(t, "localhost:10010", shutdown, GracefulShutdown)
 
 	listener.Listen(received, shutdown, 100*time.Millisecond)
 }
 
 func TestListenerReload(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:10041")
+	socket, err := NewTCPServerSocket("localhost:10020")
 	if err != nil {
 		t.Fatalf("failed to create socket")
 	}
@@ -107,9 +142,7 @@ func TestListenerReload(t *testing.T) {
 	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
 
-	go func() {
-		shutdown <- Reload
-	}()
+	go dialAndShutdown(t, "localhost:10020", shutdown, Reload)
 
 	if fd, err := listener.Listen(received, shutdown, 1*time.Second); err != nil {
 		t.Fatalf("unexpected error returned from Listen(): %s", err)
@@ -119,11 +152,7 @@ func TestListenerReload(t *testing.T) {
 }
 
 func TestListenerWithMessage(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:10026")
-	if err != nil {
-		t.Fatalf("failed to create socket")
-	}
-	defer socket.Close()
+	socket, client := NewMockSocket()
 
 	listener := &Listener{Socket: socket}
 	shutdown := make(chan TerminationRequest, 0)
@@ -135,10 +164,7 @@ func TestListenerWithMessage(t *testing.T) {
 	}()
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:10026")
-		if err != nil {
-			t.Fatalf("failed to connect to listener: %s", err)
-		}
+		conn := textproto.NewConn(client)
 
 		if _, _, err := conn.ReadCodeLine(220); err != nil {
 			t.Errorf("unexpected response from server: %s", err)
@@ -191,11 +217,7 @@ func TestListenerWithBadServer(t *testing.T) {
 }
 
 func TestListenerWithAuth(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:10028")
-	if err != nil {
-		t.Fatalf("failed to create socket")
-	}
-	defer socket.Close()
+	socket, client := NewMockSocket()
 
 	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
 	listener := &Listener{Socket: socket, Auth: auth}
@@ -203,12 +225,9 @@ func TestListenerWithAuth(t *testing.T) {
 	received := make(chan *StorageRequest, 1)
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:10028")
-		if err != nil {
-			t.Fatalf("failed to connect to listener: %s", err)
-		}
+		conn := textproto.NewConn(client)
 
-		_, _, err = conn.ReadCodeLine(220)
+		_, _, err := conn.ReadCodeLine(220)
 		if err != nil {
 			t.Errorf("unexpected response from server: %s", err)
 		}
@@ -229,11 +248,7 @@ func TestListenerWithAuth(t *testing.T) {
 }
 
 func TestListenerWithPartialAuth(t *testing.T) {
-	socket, err := NewTCPServerSocket("localhost:10029")
-	if err != nil {
-		t.Fatalf("failed to create socket")
-	}
-	defer socket.Close()
+	socket, client := NewMockSocket()
 
 	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
 	listener := &Listener{Socket: socket, Auth: auth}
@@ -241,12 +256,9 @@ func TestListenerWithPartialAuth(t *testing.T) {
 	received := make(chan *StorageRequest, 1)
 
 	go func() {
-		conn, err := textproto.Dial("tcp", "localhost:10029")
-		if err != nil {
-			t.Fatalf("failed to connect to listener: %s", err)
-		}
+		conn := textproto.NewConn(client)
 
-		_, _, err = conn.ReadCodeLine(220)
+		_, _, err := conn.ReadCodeLine(220)
 		if err != nil {
 			t.Errorf("unexpected response from server: %s", err)
 		}
@@ -366,12 +378,15 @@ sPkw89IcP2dHtwIgduZOwHZ54Ma3P6zczgqFlCCoa2AMmsMh2B32wSvzlyUCIDnu
 	return []tls.Certificate{cert}
 }
 
-func dialAndShutdown(t *testing.T, addr string, shutdown chan<- TerminationRequest) {
+func dialAndShutdown(t *testing.T, addr string, shutdown chan<- TerminationRequest, req TerminationRequest) {
 	conn, err := textproto.Dial("tcp", addr)
 	if err != nil {
 		t.Fatalf("failed to connect to listener: %s", err)
 	}
+	connectAndShutdown(t, conn, shutdown, req)
+}
 
+func connectAndShutdown(t *testing.T, conn *textproto.Conn, shutdown chan<- TerminationRequest, req TerminationRequest) {
 	if _, _, err := conn.ReadCodeLine(220); err != nil {
 		t.Errorf("unexpected response from server: %s", err)
 	}
@@ -388,5 +403,5 @@ func dialAndShutdown(t *testing.T, addr string, shutdown chan<- TerminationReque
 		t.Errorf("failed to close listener: %s", err)
 	}
 
-	shutdown <- GracefulShutdown
+	shutdown <- req
 }

@@ -70,7 +70,16 @@ type FileServerSocket struct {
 func NewFileServerSocket(fd uintptr) (*FileServerSocket, error) {
 	file := os.NewFile(fd, "socket")
 	ln, err := net.FileListener(file)
-	syscall.Close(int(fd))
+
+	// We used to syscall.Close(int(fd)) here because FileListener dups it, and
+	// we don't need the original anymore after that.
+	//
+	// It turns out that doing that can put the underlying socket in a bad
+	// state in some tricky that I don't fully understand.  The downside to not
+	// calling it is that we have two open FDs pointing to the same socket
+	// during the lifetime of the program, but only one (the correct one) ends
+	// up being inherited on reload, so this is actually fine.
+
 	return &FileServerSocket{ln}, err
 }
 
