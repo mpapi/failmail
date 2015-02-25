@@ -51,6 +51,7 @@ type DiskStore struct {
 type DiskMetadata struct {
 	EnvelopeFrom string
 	EnvelopeTo   []string
+	RedirectedTo []string
 }
 
 // `NewDiskStore` creates a new `DiskStore` using `maildir` to back it.
@@ -66,7 +67,7 @@ func (s *DiskStore) Add(now time.Time, msg *ReceivedMessage) (MessageId, error) 
 	}
 
 	// Write the metadata last.
-	meta := &DiskMetadata{msg.Sender(), msg.Recipients()}
+	meta := &DiskMetadata{msg.Sender(), msg.Recipients(), msg.RedirectedTo}
 	return MessageId(name), s.writeMetadata(name, now, meta)
 }
 
@@ -160,6 +161,7 @@ func (s *DiskStore) readMessage(name string) (*ReceivedMessage, error) {
 			Data: data,
 		},
 		msg,
+		metadata.RedirectedTo,
 	}, nil
 }
 

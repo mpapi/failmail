@@ -22,6 +22,7 @@ type Listener struct {
 	Auth      Auth
 	TLSConfig *tls.Config
 	Debug     bool
+	Rewriter  AddressRewriter
 	conns     int
 }
 
@@ -250,6 +251,9 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 			resp, msg := session.ReadData(reader)
 			if msg != nil {
 				log.Printf("received message with subject %#v", msg.Parsed.Header.Get("Subject"))
+
+				msg.RedirectedTo = l.Rewriter.RewriteAll(msg.To)
+
 				errors := make(chan error, 0)
 				received <- &StorageRequest{msg, errors}
 				if err := <-errors; err != nil {

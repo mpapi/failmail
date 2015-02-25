@@ -46,7 +46,16 @@ func (m *message) Contents() []byte {
 // server in a `SummaryMessage`.
 type ReceivedMessage struct {
 	*message
-	Parsed *mail.Message
+	Parsed       *mail.Message
+	RedirectedTo []string
+}
+
+func (r *ReceivedMessage) Recipients() []string {
+	if r.RedirectedTo != nil && len(r.RedirectedTo) > 0 {
+		return r.RedirectedTo
+	} else {
+		return r.To
+	}
 }
 
 func (r *ReceivedMessage) ReadBody() (string, error) {

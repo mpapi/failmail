@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -18,6 +19,8 @@ type Config struct {
 	TlsKey          string        `help:"PEM key file for TLS"`
 	ShutdownTimeout time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
 	DebugReceiver   bool          `help:"log traffic sent to and from downstream connections"`
+	RewriteSrc      string        `help:"pattern to match on recipients for address rewriting"`
+	RewriteDest     string        `help:"rewrite matching recipients to this address"`
 
 	// Options for storing messages.
 	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
@@ -164,12 +167,20 @@ func (c *Config) MakeReceiver() (*Listener, error) {
 		return nil, err
 	}
 
+	rewriter := AddressRewriter{}
+	if c.RewriteSrc != "" && c.RewriteDest != "" {
+		rewriter.Source = regexp.MustCompile(c.RewriteSrc)
+		rewriter.Dest = c.RewriteDest
+	} else if c.RewriteSrc != "" || c.RewriteDest != "" {
+		return nil, fmt.Errorf("--rewrite-src and --rewrite-dest must be given together")
+	}
+
 	// The listener talks SMTP to clients, and puts any messages they send onto
 	// the `received` channel.
 	if socket, err := c.Socket(); err != nil {
 		return nil, err
 	} else {
-		return &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig, Debug: c.DebugReceiver}, nil
+		return &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig, Debug: c.DebugReceiver, Rewriter: rewriter}, nil
 	}
 }
 
