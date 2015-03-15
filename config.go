@@ -17,6 +17,7 @@ type Config struct {
 	Credentials     string        `help:"username:password for authenticating to failmail"`
 	TlsCert         string        `help:"PEM certificate file for TLS"`
 	TlsKey          string        `help:"PEM key file for TLS"`
+	Ssl             bool          `help:"enable TLS immediately (disables STARTTLS)"`
 	ShutdownTimeout time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
 	DebugReceiver   bool          `help:"log traffic sent to and from downstream connections"`
 	RewriteSrc      string        `help:"pattern to match on recipients for address rewriting"`
@@ -125,11 +126,40 @@ func (c *Config) TLSConfig() (*tls.Config, error) {
 	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
 }
 
-func (c *Config) Socket() (ServerSocket, error) {
+// Returns a *tls.Config to use for STARTTLS. If in SSL mode (encryption from
+// the start of a connection, which disables STARTTLS), returns nil, because
+// the *tls.Config is used only at the time of socket creation.
+func (c *Config) ConfigForStarttls() (*tls.Config, error) {
+	if c.Ssl {
+		return nil, nil
+	}
+	return c.TLSConfig()
+}
+
+func (c *Config) SocketWithoutTLS() (ServerSocket, error) {
 	if c.SocketFd > 0 {
 		return NewFileServerSocket(uintptr(c.SocketFd))
+	} else {
+		return NewTCPServerSocket(c.BindAddr)
 	}
-	return NewTCPServerSocket(c.BindAddr)
+}
+
+func (c *Config) Socket() (ServerSocket, error) {
+	socket, err := c.SocketWithoutTLS()
+	if err != nil {
+		return nil, err
+	}
+
+	if !c.Ssl {
+		return socket, nil
+	}
+
+	conf, err := c.TLSConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return NewSSLServerSocket(socket, conf), nil
 }
 
 func (c *Config) SummaryRenderer() SummaryRenderer {
@@ -162,7 +192,7 @@ func (c *Config) MakeReceiver() (*Listener, error) {
 		return nil, err
 	}
 
-	tlsConfig, err := c.TLSConfig()
+	tlsConfig, err := c.ConfigForStarttls()
 	if err != nil {
 		return nil, err
 	}

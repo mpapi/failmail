@@ -33,6 +33,24 @@ type ServerSocket interface {
 	String() string
 }
 
+type SSLServerSocket struct {
+	net.Listener
+	orig ServerSocket
+}
+
+func NewSSLServerSocket(socket ServerSocket, config *tls.Config) *SSLServerSocket {
+	ssl := tls.NewListener(socket, config)
+	return &SSLServerSocket{ssl, socket}
+}
+
+func (s *SSLServerSocket) Fd() (uintptr, error) {
+	return s.orig.Fd()
+}
+
+func (s *SSLServerSocket) String() string {
+	return "ssl:" + s.orig.String()
+}
+
 // TCPServerSocket is a ServerSocket implementation for listeners that bind a
 // TCP port from an address.
 type TCPServerSocket struct {
