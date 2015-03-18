@@ -199,7 +199,7 @@ func (s *Session) setData(data string) (Response, *ReceivedMessage) {
 		return Response{451, "Failed to parse data"}, nil
 	} else {
 		received := s.Received
-		s.Received = &ReceivedMessage{}
+		s.Received = &ReceivedMessage{message: &message{}}
 
 		received.Data = []byte(data)
 		received.Parsed = msg
