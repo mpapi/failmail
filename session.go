@@ -116,6 +116,7 @@ type Session struct {
 	parser        Parser
 	auth          Auth
 	hasTLS        bool
+	usingTLS      bool
 }
 
 // Sets up a session and returns the `Response` that should be sent to a
@@ -274,7 +275,7 @@ func (s *Session) Advance(node *parse.Node) Response {
 		return Response{250, "Hello"}
 	case "ehlo":
 		text := "Hello\r\nAUTH PLAIN"
-		if s.hasTLS {
+		if s.hasTLS && !s.usingTLS {
 			text += "\r\nSTARTTLS"
 		}
 		return Response{250, text}
@@ -299,6 +300,12 @@ func (s *Session) Advance(node *parse.Node) Response {
 			return s.authenticate(authType, "")
 		}
 	case "starttls":
+		if !s.hasTLS {
+			return Response{500, "STARTTLS not supported"}
+		} else if s.usingTLS {
+			return Response{500, "Already using TLS"}
+		}
+		s.usingTLS = true
 		return Response{220, "Ready to switch to TLS"}
 	default:
 		return Response{502, "Not implemented"}
