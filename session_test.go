@@ -67,7 +67,7 @@ func TestResponseWriteToMultiLine(t *testing.T) {
 
 func TestSessionStart(t *testing.T) {
 	s := new(Session)
-	resp := s.Start(nil, false)
+	resp := s.Start(nil, UNENCRYPTED)
 
 	if s.Received == nil {
 		t.Errorf("start should set up a message")
@@ -80,7 +80,7 @@ func TestSessionStart(t *testing.T) {
 
 func TestSessionReadCommand(t *testing.T) {
 	s := new(Session)
-	s.Start(nil, false)
+	s.Start(nil, UNENCRYPTED)
 
 	buf := bytes.NewBufferString("HELO test.example.com\r\n")
 	resp, err := s.ReadCommand(buf)
@@ -105,7 +105,7 @@ func TestSessionReadCommand(t *testing.T) {
 
 func TestSessionAdvance(t *testing.T) {
 	s := new(Session)
-	s.Start(nil, false)
+	s.Start(nil, UNENCRYPTED)
 
 	if resp := s.Advance(nil); resp.Code != 500 {
 		t.Errorf("nil node is not a parse error")
@@ -261,7 +261,7 @@ func TestAuthRequired(t *testing.T) {
 	parser := SMTPParser()
 
 	s := new(Session)
-	s.Start(auth, false)
+	s.Start(auth, UNENCRYPTED)
 
 	if resp := s.Advance(parser("HELO test.example.com\r\n")); resp.Code != 250 {
 		t.Errorf("HELO should get a 250 response")
@@ -273,12 +273,12 @@ func TestAuthRequired(t *testing.T) {
 }
 
 func TestAuthBadMethod(t *testing.T) {
-	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+	auth := &SingleUserPlainAuth{"testuser", "testpass", true}
 
 	parser := SMTPParser()
 
 	s := new(Session)
-	s.Start(auth, false)
+	s.Start(auth, UNENCRYPTED)
 
 	if resp := s.Advance(parser("HELO test.example.com\r\n")); resp.Code != 250 {
 		t.Errorf("HELO should get a 250 response")
@@ -290,12 +290,12 @@ func TestAuthBadMethod(t *testing.T) {
 }
 
 func TestAuthBadCredentials(t *testing.T) {
-	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+	auth := &SingleUserPlainAuth{"testuser", "testpass", true}
 
 	parser := SMTPParser()
 
 	s := new(Session)
-	s.Start(auth, false)
+	s.Start(auth, UNENCRYPTED)
 
 	if resp := s.Advance(parser("HELO test.example.com\r\n")); resp.Code != 250 {
 		t.Errorf("HELO should get a 250 response")
@@ -307,12 +307,12 @@ func TestAuthBadCredentials(t *testing.T) {
 }
 
 func TestAuthRepeated(t *testing.T) {
-	auth := &SingleUserPlainAuth{Username: "testuser", Password: "testpass"}
+	auth := &SingleUserPlainAuth{"testuser", "testpass", true}
 
 	parser := SMTPParser()
 
 	s := new(Session)
-	s.Start(auth, false)
+	s.Start(auth, UNENCRYPTED)
 
 	if resp := s.Advance(parser("HELO test.example.com\r\n")); resp.Code != 250 {
 		t.Errorf("HELO should get a 250 response")

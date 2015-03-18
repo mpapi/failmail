@@ -11,6 +11,31 @@ import (
 	"strings"
 )
 
+type SessionSecurity int
+
+const (
+	UNENCRYPTED SessionSecurity = iota
+	TLS_PRE_STARTTLS
+	TLS_POST_STARTTLS
+	SSL
+)
+
+func (s SessionSecurity) IsEncrypted() bool {
+	return s == TLS_POST_STARTTLS || s == SSL
+}
+
+func (s SessionSecurity) AllowStarttls() bool {
+	return s == TLS_PRE_STARTTLS
+}
+
+type AuthState int
+
+const (
+	NOT_PERMITTED AuthState = iota
+	REQUIRED
+	AUTHENTICATED
+)
+
 var pattern = regexp.MustCompile(`\d+`)
 
 type Response struct {
@@ -92,11 +117,17 @@ func (w *debugWriter) Flush() error {
 
 type Auth interface {
 	ValidCredentials(string) (bool, error)
+	IsPermitted(SessionSecurity) bool
 }
 
 type SingleUserPlainAuth struct {
-	Username string
-	Password string
+	Username             string
+	Password             string
+	allowUnencryptedAuth bool
+}
+
+func (a *SingleUserPlainAuth) IsPermitted(security SessionSecurity) bool {
+	return security.IsEncrypted() || a.allowUnencryptedAuth
 }
 
 func (a *SingleUserPlainAuth) ValidCredentials(token string) (bool, error) {
@@ -110,24 +141,27 @@ func (a *SingleUserPlainAuth) ValidCredentials(token string) (bool, error) {
 }
 
 type Session struct {
-	Received      *ReceivedMessage
-	Authenticated bool
-	hostname      string
-	parser        Parser
-	auth          Auth
-	hasTLS        bool
-	usingTLS      bool
+	Received  *ReceivedMessage
+	hostname  string
+	parser    Parser
+	auth      Auth
+	authState AuthState
+	security  SessionSecurity
 }
 
 // Sets up a session and returns the `Response` that should be sent to a
 // client immediately after it connects.
-func (s *Session) Start(auth Auth, hasTLS bool) Response {
+func (s *Session) Start(auth Auth, security SessionSecurity) Response {
 	s.initHostname()
 	s.parser = SMTPParser()
 	s.Received = &ReceivedMessage{message: &message{}}
-	s.Authenticated = auth == nil
 	s.auth = auth
-	s.hasTLS = hasTLS
+	if s.auth == nil {
+		s.authState = NOT_PERMITTED
+	} else {
+		s.authState = REQUIRED
+	}
+	s.security = security
 
 	return Response{220, fmt.Sprintf("%s Hi there", s.hostname)}
 }
@@ -214,10 +248,10 @@ func (s *Session) ReadAuthResponse(reader stringReader) Response {
 
 func (s *Session) authRequired(command *parse.Node) bool {
 	switch strings.ToLower(command.Text) {
-	case "quit", "helo", "ehlo", "rset", "noop", "auth":
+	case "quit", "helo", "ehlo", "rset", "noop", "auth", "starttls":
 		return false
 	}
-	return !s.Authenticated
+	return s.authState == REQUIRED
 }
 
 func (s *Session) authenticate(method string, payload string) Response {
@@ -242,10 +276,10 @@ func (s *Session) checkCredentials(payload string) Response {
 		return Response{501, "Error validating credentials"}
 	}
 
-	s.Authenticated = valid
 	if !valid {
 		return Response{535, "Authentication failed"}
 	} else {
+		s.authState = AUTHENTICATED
 		return Response{235, "Authentication successful"}
 	}
 }
@@ -275,7 +309,7 @@ func (s *Session) Advance(node *parse.Node) Response {
 		return Response{250, "Hello"}
 	case "ehlo":
 		text := "Hello\r\nAUTH PLAIN"
-		if s.hasTLS && !s.usingTLS {
+		if s.security.AllowStarttls() {
 			text += "\r\nSTARTTLS"
 		}
 		return Response{250, text}
@@ -290,8 +324,12 @@ func (s *Session) Advance(node *parse.Node) Response {
 	case "data":
 		return Response{354, "Go"}
 	case "auth":
-		if s.Authenticated {
+		if s.authState == REQUIRED && !s.auth.IsPermitted(s.security) {
+			return Response{502, "An encrypted connection is required for authentication"}
+		} else if s.authState == AUTHENTICATED {
 			return Response{503, "Already authenticated"}
+		} else if s.authState == NOT_PERMITTED {
+			return Response{502, "Authentication is not supported"}
 		}
 		authType := node.Children["type"].Text
 		if payload, ok := node.Get("payload"); ok {
@@ -300,12 +338,11 @@ func (s *Session) Advance(node *parse.Node) Response {
 			return s.authenticate(authType, "")
 		}
 	case "starttls":
-		if !s.hasTLS {
-			return Response{500, "STARTTLS not supported"}
-		} else if s.usingTLS {
+		if s.security == TLS_POST_STARTTLS {
 			return Response{500, "Already using TLS"}
+		} else if !s.security.AllowStarttls() {
+			return Response{500, "STARTTLS not supported"}
 		}
-		s.usingTLS = true
 		return Response{220, "Ready to switch to TLS"}
 	default:
 		return Response{502, "Not implemented"}

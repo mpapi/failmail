@@ -12,16 +12,17 @@ import (
 
 type Config struct {
 	// Options for listening for incoming messages.
-	BindAddr        string        `help:"local bind address"`
-	SocketFd        int           `help:"file descriptor of socket to listen on"`
-	Credentials     string        `help:"username:password for authenticating to failmail"`
-	TlsCert         string        `help:"PEM certificate file for TLS"`
-	TlsKey          string        `help:"PEM key file for TLS"`
-	Ssl             bool          `help:"enable TLS immediately (disables STARTTLS)"`
-	ShutdownTimeout time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
-	DebugReceiver   bool          `help:"log traffic sent to and from downstream connections"`
-	RewriteSrc      string        `help:"pattern to match on recipients for address rewriting"`
-	RewriteDest     string        `help:"rewrite matching recipients to this address"`
+	BindAddr             string        `help:"local bind address"`
+	SocketFd             int           `help:"file descriptor of socket to listen on"`
+	Credentials          string        `help:"username:password for authenticating to failmail"`
+	TlsCert              string        `help:"PEM certificate file for TLS"`
+	TlsKey               string        `help:"PEM key file for TLS"`
+	Ssl                  bool          `help:"enable TLS immediately (disables STARTTLS)"`
+	ShutdownTimeout      time.Duration `help:"wait this long for open connections to finish when shutting down or reloading"`
+	DebugReceiver        bool          `help:"log traffic sent to and from downstream connections"`
+	RewriteSrc           string        `help:"pattern to match on recipients for address rewriting"`
+	RewriteDest          string        `help:"rewrite matching recipients to this address"`
+	AllowUnencryptedAuth bool          `help:"allow non-hashed authentication over unencrypted connections"`
 
 	// Options for storing messages.
 	MemoryStore  bool   `help:"store messages in memory instead of an on-disk maildir"`
@@ -85,7 +86,7 @@ func (c *Config) Auth() (Auth, error) {
 		return nil, fmt.Errorf("credentials must be in username:password format")
 	}
 
-	return &SingleUserPlainAuth{Username: parts[0], Password: parts[1]}, nil
+	return &SingleUserPlainAuth{parts[0], parts[1], c.AllowUnencryptedAuth}, nil
 }
 
 func (c *Config) Batch() GroupBy {
@@ -114,26 +115,22 @@ func (c *Config) Upstream() (Upstream, error) {
 	return upstream, nil
 }
 
-func (c *Config) TLSConfig() (*tls.Config, error) {
+func (c *Config) TLSConfig() (SessionSecurity, *tls.Config, error) {
 	if c.TlsCert == "" || c.TlsKey == "" {
-		return nil, nil
+		return UNENCRYPTED, nil, nil
 	}
 
 	cert, err := tls.LoadX509KeyPair(c.TlsCert, c.TlsKey)
 	if err != nil {
-		return nil, err
+		return UNENCRYPTED, nil, err
 	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
-}
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 
-// Returns a *tls.Config to use for STARTTLS. If in SSL mode (encryption from
-// the start of a connection, which disables STARTTLS), returns nil, because
-// the *tls.Config is used only at the time of socket creation.
-func (c *Config) ConfigForStarttls() (*tls.Config, error) {
 	if c.Ssl {
-		return nil, nil
+		return SSL, tlsConfig, nil
+	} else {
+		return TLS_PRE_STARTTLS, tlsConfig, nil
 	}
-	return c.TLSConfig()
 }
 
 func (c *Config) SocketWithoutTLS() (ServerSocket, error) {
@@ -154,12 +151,16 @@ func (c *Config) Socket() (ServerSocket, error) {
 		return socket, nil
 	}
 
-	conf, err := c.TLSConfig()
+	security, conf, err := c.TLSConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	return NewSSLServerSocket(socket, conf), nil
+	if security == SSL {
+		return NewSSLServerSocket(socket, conf), nil
+	} else {
+		return socket, nil
+	}
 }
 
 func (c *Config) SummaryRenderer() SummaryRenderer {
@@ -192,7 +193,7 @@ func (c *Config) MakeReceiver() (*Listener, error) {
 		return nil, err
 	}
 
-	tlsConfig, err := c.ConfigForStarttls()
+	security, tlsConfig, err := c.TLSConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +211,7 @@ func (c *Config) MakeReceiver() (*Listener, error) {
 	if socket, err := c.Socket(); err != nil {
 		return nil, err
 	} else {
-		return &Listener{Socket: socket, Auth: auth, TLSConfig: tlsConfig, Debug: c.DebugReceiver, Rewriter: rewriter}, nil
+		return &Listener{Socket: socket, Auth: auth, Security: security, TLSConfig: tlsConfig, Debug: c.DebugReceiver, Rewriter: rewriter}, nil
 	}
 }
 

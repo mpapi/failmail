@@ -219,7 +219,7 @@ func TestListenerWithBadServer(t *testing.T) {
 func TestListenerWithAuth(t *testing.T) {
 	socket, client := NewMockSocket()
 
-	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
+	auth := &SingleUserPlainAuth{"test", "test", true}
 	listener := &Listener{Socket: socket, Auth: auth}
 	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
@@ -250,7 +250,7 @@ func TestListenerWithAuth(t *testing.T) {
 func TestListenerWithPartialAuth(t *testing.T) {
 	socket, client := NewMockSocket()
 
-	auth := &SingleUserPlainAuth{Username: "test", Password: "test"}
+	auth := &SingleUserPlainAuth{"test", "test", true}
 	listener := &Listener{Socket: socket, Auth: auth}
 	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
@@ -290,7 +290,7 @@ func TestListenerWithTLS(t *testing.T) {
 	if len(certs) == 0 {
 		t.Fatalf("failed to read certificates for TLS test")
 	}
-	listener := &Listener{Socket: socket, TLSConfig: &tls.Config{Certificates: certs}}
+	listener := &Listener{Socket: socket, Security: TLS_PRE_STARTTLS, TLSConfig: &tls.Config{Certificates: certs}}
 	shutdown := make(chan TerminationRequest, 0)
 	received := make(chan *StorageRequest, 1)
 

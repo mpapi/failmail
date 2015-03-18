@@ -20,6 +20,7 @@ import (
 type Listener struct {
 	Socket    ServerSocket
 	Auth      Auth
+	Security  SessionSecurity
 	TLSConfig *tls.Config
 	Debug     bool
 	Rewriter  AddressRewriter
@@ -245,7 +246,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 	}
 
 	session := new(Session)
-	if err := session.Start(l.Auth, l.TLSConfig != nil).WriteTo(writer); err != nil {
+	if err := session.Start(l.Auth, l.Security).WriteTo(writer); err != nil {
 		log.Printf("error writing to client: %s", err)
 		return
 	}
@@ -302,6 +303,7 @@ func (l *Listener) handleConnection(conn io.ReadWriteCloser, received chan<- *St
 			tlsConn := tls.Server(netConn, l.TLSConfig)
 			origReader.Reset(tlsConn)
 			origWriter.Reset(tlsConn)
+			session.security = TLS_POST_STARTTLS
 			defer tlsConn.Close()
 		}
 	}
