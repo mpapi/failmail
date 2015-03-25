@@ -14,7 +14,7 @@ func SMTPParser() func(string) *p.Node {
 	domain := p.Any()
 	domain.Add(p.Separating(".", name, domain), name)
 
-	snum := p.Regexp(`([0-9]|[0-9][0-9|1[0-9][0-9]|2[0-4][0-9]|25[0-5])`)
+	snum := p.Regexp(`([0-9]|[0-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])`)
 	addr := p.Separating(".", snum, snum, snum, snum)
 	addressLiteral := p.Surrounding("[", "]", addr)
 
