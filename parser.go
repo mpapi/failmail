@@ -18,6 +18,8 @@ func SMTPParser() func(string) *p.Node {
 	addr := p.Separating(".", snum, snum, snum, snum)
 	addressLiteral := p.Surrounding("[", "]", addr)
 
+	domainOrAddress := p.Any(domain, addressLiteral)
+
 	str := p.Regexp(`(\\.|[^ <>\(\)\[\]\\.,;:@"\r\n])+`)
 
 	dotString := p.Any()
@@ -26,7 +28,7 @@ func SMTPParser() func(string) *p.Node {
 	quotedString := p.Regexp(`"(\\.|[^ \r\n"\\])+"`)
 
 	localPart := p.Any(dotString, quotedString)
-	mailbox := p.Separating("@", localPart, p.Any(addressLiteral, domain))
+	mailbox := p.Separating("@", localPart, domainOrAddress)
 
 	path := p.Surrounding("<", ">", mailbox)
 	reversePath := p.Any(path, p.Literal("<>"))
@@ -42,7 +44,7 @@ func SMTPParser() func(string) *p.Node {
 	}
 
 	// RFC 821
-	helo := Line(Command("HELO"), space, p.Label("domain", domain))
+	helo := Line(Command("HELO"), space, p.Label("domain", domainOrAddress))
 	mail := Line(Command("MAIL"), space, p.ILiteral("FROM:"), maybeSpace, p.Label("path", reversePath))
 	rcpt := Line(Command("RCPT"), space, p.ILiteral("TO:"), maybeSpace, p.Label("path", path))
 	data := Line(Command("DATA"))

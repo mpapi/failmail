@@ -20,6 +20,7 @@ func ok(node *p.Node) bool {
 
 var parserTests = []ParserTestCase{
 	ParserTestCase{ok, "HELO example.com\r\n"},
+	ParserTestCase{ok, "HELO [127.0.0.1]\r\n"},
 	ParserTestCase{failed, "HELO\r\n"},
 	ParserTestCase{ok, "VRFY user\r\n"},
 	ParserTestCase{ok, "AUTH PLAIN dGVzdA==\r\n"},
