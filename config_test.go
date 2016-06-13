@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/hut8labs/failmail/configure"
+	"github.com/mpapi/failmail/configure"
 	"io/ioutil"
 	"os"
 	"testing"

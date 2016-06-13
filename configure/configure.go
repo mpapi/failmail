@@ -3,7 +3,7 @@ package configure
 import (
 	"flag"
 	"fmt"
-	p "github.com/hut8labs/failmail/parse"
+	p "github.com/mpapi/failmail/parse"
 	"io"
 	"io/ioutil"
 	"os"

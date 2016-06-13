@@ -1,6 +1,6 @@
 # Failmail
 
-[![Build Status](https://travis-ci.org/hut8labs/failmail.svg?branch=master)](https://travis-ci.org/hut8labs/failmail)
+[![Build Status](https://travis-ci.org/mpapi/failmail.svg?branch=master)](https://travis-ci.org/mpapi/failmail)
 
 Failmail is an SMTP proxy server that deduplicates and summarizes the emails it
 receives. It typically sits between an application and the SMTP server that
@@ -26,11 +26,11 @@ configuration change in your application.
 To download and build from source:
 
     $ export GOPATH=...
-    $ go get -u github.com/hut8labs/failmail
+    $ go get -u github.com/mpapi/failmail
     $ $GOPATH/bin/failmail
 
 Or, for 64-bit Linux, you can grab a binary of the [latest
-release](https://github.com/hut8labs/failmail/releases/latest).
+release](https://github.com/mpapi/failmail/releases/latest).
 
 
 ## Usage
@@ -219,8 +219,8 @@ configuration:
 ## Development
 
     $ export GOPATH=...
-    $ go get -d github.com/hut8labs/failmail
-    $ cd $GOPATH/src/github.com/hut8labs/failmail
+    $ go get -d github.com/mpapi/failmail
+    $ cd $GOPATH/src/github.com/mpapi/failmail
     $ ...
     $ go fmt
     $ go build

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"github.com/hut8labs/failmail/parse"
+	"github.com/mpapi/failmail/parse"
 	"log"
 	"net/mail"
 	"regexp"

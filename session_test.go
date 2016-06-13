@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	p "github.com/hut8labs/failmail/parse"
+	p "github.com/mpapi/failmail/parse"
 	"testing"
 )
 

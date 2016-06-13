@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/hut8labs/failmail/configure"
+	"github.com/mpapi/failmail/configure"
 	"log"
 	"os"
 	"sync"
