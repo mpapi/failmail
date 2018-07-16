@@ -29,13 +29,14 @@ type Config struct {
 	MessageStore string `help:"use this directory as a maildir for holding received messages"`
 
 	// Options for summarizing messages.
-	From       string        `help:"from address"`
-	WaitPeriod time.Duration `help:"wait this long for more batchable messages"`
-	MaxWait    time.Duration `help:"wait at most this long from first message to send summary"`
-	Poll       time.Duration `help:"check the store for new messages this frequently"`
-	BatchExpr  string        `help:"an expression used to determine how messages are batched into summary emails"`
-	GroupExpr  string        `help:"an expression used to determine how messages are grouped within summary emails"`
-	Template   string        `help:"path to a summary message template file"`
+	From          string        `help:"from address"`
+	SubjectPrefix string        `help:"summary subject prefix"`
+	WaitPeriod    time.Duration `help:"wait this long for more batchable messages"`
+	MaxWait       time.Duration `help:"wait at most this long from first message to send summary"`
+	Poll          time.Duration `help:"check the store for new messages this frequently"`
+	BatchExpr     string        `help:"an expression used to determine how messages are batched into summary emails"`
+	GroupExpr     string        `help:"an expression used to determine how messages are grouped within summary emails"`
+	Template      string        `help:"path to a summary message template file"`
 
 	// Options for relaying outgoing messages.
 	RelayAddr     string `help:"upstream relay server address"`
@@ -62,12 +63,13 @@ func Defaults() *Config {
 
 		MessageStore: "incoming",
 
-		From:       DefaultFromAddress("failmail"),
-		WaitPeriod: 30 * time.Second,
-		MaxWait:    5 * time.Minute,
-		Poll:       5 * time.Second,
-		BatchExpr:  `{{.Header.Get "X-Failmail-Split"}}`,
-		GroupExpr:  `{{.Header.Get "Subject"}}`,
+		From:          DefaultFromAddress("failmail"),
+		SubjectPrefix: "[failmail]",
+		WaitPeriod:    30 * time.Second,
+		MaxWait:       5 * time.Minute,
+		Poll:          5 * time.Second,
+		BatchExpr:     `{{.Header.Get "X-Failmail-Split"}}`,
+		GroupExpr:     `{{.Header.Get "Subject"}}`,
 
 		RelayAddr: "localhost:25",
 		FailDir:   "failed",
@@ -228,14 +230,15 @@ func (c *Config) MakeSummarizer() (*MessageBuffer, error) {
 		return nil, err
 	} else {
 		return &MessageBuffer{
-			SoftLimit: c.WaitPeriod,
-			HardLimit: c.MaxWait,
-			Batch:     c.Batch(),
-			Group:     c.Group(),
-			From:      c.From,
-			Store:     store,
-			Renderer:  c.SummaryRenderer(),
-			batches:   NewBatches(),
+			SoftLimit:     c.WaitPeriod,
+			HardLimit:     c.MaxWait,
+			Batch:         c.Batch(),
+			Group:         c.Group(),
+			From:          c.From,
+			SubjectPrefix: c.SubjectPrefix,
+			Store:         store,
+			Renderer:      c.SummaryRenderer(),
+			batches:       NewBatches(),
 		}, nil
 	}
 }

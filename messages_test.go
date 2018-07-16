@@ -103,7 +103,7 @@ func TestSummarize(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test 2\r\n\r\ntest body 2\r\n")
 
-	summarized, err := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
+	summarized, err := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "[customPrefix]", "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
 
 	if err != nil {
 		t.Errorf("unexpected error in Summarize(): %s", err)
@@ -113,24 +113,25 @@ func TestSummarize(t *testing.T) {
 	if !reflect.DeepEqual(summarized.To, []string{"test2@example.com"}) {
 		t.Errorf("unexpected to address from Summarize(): %#v", summarized.To)
 	}
-	if summarized.Subject != "[failmail] 2 instances of 2 messages" {
+	if summarized.Subject != "[customPrefix] 2 instances of 2 messages" {
 		t.Errorf("unexpected subject from Summarize(): %s", summarized.Subject)
 	}
-	if headers := summarized.Headers(); headers != "From: failmail@example.com\r\nTo: test2@example.com\r\nSubject: [failmail] 2 instances of 2 messages\r\nDate: 01 Mar 14 00:00 UTC\r\n\r\n" {
+	if headers := summarized.Headers(); headers != "From: failmail@example.com\r\nTo: test2@example.com\r\nSubject: [customPrefix] 2 instances of 2 messages\r\nDate: 01 Mar 14 00:00 UTC\r\n\r\n" {
 		t.Errorf("unexpected headers from Summarize(): %s", headers)
 	}
 }
 
 func makeMessageBuffer() *MessageBuffer {
 	return &MessageBuffer{
-		SoftLimit: 5 * time.Second,
-		HardLimit: 9 * time.Second,
-		Batch:     GroupByExpr("batch", `{{.Header.Get "Subject"}}`),
-		Group:     GroupByExpr("group", `{{.Header.Get "Subject"}}`),
-		From:      "test@example.com",
-		Store:     NewMemoryStore(),
-		Renderer:  &NoRenderer{},
-		batches:   NewBatches(),
+		SoftLimit:     5 * time.Second,
+		HardLimit:     9 * time.Second,
+		Batch:         GroupByExpr("batch", `{{.Header.Get "Subject"}}`),
+		Group:         GroupByExpr("group", `{{.Header.Get "Subject"}}`),
+		From:          "test@example.com",
+		SubjectPrefix: "[failmail]",
+		Store:         NewMemoryStore(),
+		Renderer:      &NoRenderer{},
+		batches:       NewBatches(),
 	}
 }
 
@@ -290,7 +291,7 @@ func TestTemplateRenderer(t *testing.T) {
 	msg1 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test2@example.com\r\nDate: Tue, 01 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 1\r\n")
 	msg2 := makeReceivedMessage(t, "From: test@example.com\r\nTo: test3@example.com\r\nDate: Wed, 02 Jul 2014 12:34:56 -0400\r\nSubject: test\r\n\r\ntest body 2\r\n")
 
-	summarized, err := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
+	summarized, err := Summarize(GroupByExpr("group", `{{.Header.Get "Subject"}}`), "[failmail]", "failmail@example.com", "test2@example.com", makeStoredMessages(msg1, msg2))
 	if err != nil {
 		t.Errorf("unexpected error in Summarize(): %s", err)
 	}
