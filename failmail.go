@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/mpapi/failmail/configure"
 	"log"
 	"os"
 	"sync"
+
+	"github.com/mpapi/failmail/configure"
 )
 
 //go:generate ./version.sh

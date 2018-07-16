@@ -202,7 +202,7 @@ func (s *SummaryMessage) Contents() []byte {
 	return buf.Bytes()
 }
 
-func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) (*SummaryMessage, error) {
+func Summarize(group GroupBy, subjectPrefix, from, to string, stored []*StoredMessage) (*SummaryMessage, error) {
 	result := &SummaryMessage{}
 	uniques, err := Compact(group, stored)
 	if err != nil {
@@ -215,10 +215,10 @@ func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) (
 
 	instances := Plural(len(stored), "instance", "instances")
 	if len(uniques) == 1 {
-		result.Subject = fmt.Sprintf("[failmail] %s: %s", instances, uniques[0].Subject)
+		result.Subject = fmt.Sprintf("%s %s: %s", subjectPrefix, instances, uniques[0].Subject)
 	} else {
 		messages := Plural(len(uniques), "message", "messages")
-		result.Subject = fmt.Sprintf("[failmail] %s of %s", instances, messages)
+		result.Subject = fmt.Sprintf("%s %s of %s", subjectPrefix, instances, messages)
 	}
 
 	result.StoredMessages = stored
@@ -227,14 +227,15 @@ func Summarize(group GroupBy, from string, to string, stored []*StoredMessage) (
 }
 
 type MessageBuffer struct {
-	SoftLimit time.Duration
-	HardLimit time.Duration
-	Batch     GroupBy // determines how messages are split into summary emails
-	Group     GroupBy // determines how messages are grouped within summary emails
-	From      string
-	Store     MessageStore
-	Renderer  SummaryRenderer
-	lastFlush time.Time
+	SoftLimit     time.Duration
+	HardLimit     time.Duration
+	Batch         GroupBy // determines how messages are split into summary emails
+	Group         GroupBy // determines how messages are grouped within summary emails
+	From          string
+	SubjectPrefix string
+	Store         MessageStore
+	Renderer      SummaryRenderer
+	lastFlush     time.Time
 	*batches
 }
 
@@ -321,7 +322,7 @@ func (b *MessageBuffer) Flush(now time.Time, outgoing chan<- *SendRequest, force
 	// Summarize message groups that are due to be sent.
 	for key, msgs := range b.messages {
 		if force || b.NeedsFlush(now, key) {
-			summary, err := Summarize(b.Group, b.From, key.Recipient, msgs)
+			summary, err := Summarize(b.Group, b.SubjectPrefix, b.From, key.Recipient, msgs)
 			if err != nil {
 				log.Printf("warning: error summarizing messages with key %s: %s", key, err)
 			}
